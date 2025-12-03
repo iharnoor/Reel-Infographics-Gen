@@ -1,0 +1,23 @@
+{
+  "name": "reel-infographics-gen",
+  "version": "1.0.0",
+  "description": "Reel infographics generator with Kling video generation via FAL.ai",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "generate": "node generate-video.js"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "keywords": [
+    "video-generation",
+    "kling",
+    "fal-ai",
+    "infographics"
+  ],
+  "author": "",
+  "license": "MIT"
+}
