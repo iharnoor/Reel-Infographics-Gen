@@ -186,8 +186,8 @@ export const generateSceneVideo = async (imageB64: string, visualPrompt: string)
     const imageUrl = await fal.storage.upload(imageBlob);
     console.log("Image uploaded:", imageUrl);
 
-    // 3. Enhance Prompt for Video
-    const prompt = `${visualPrompt}. Smooth camera motion, elements animate sequentially, clean minimalist style, high contrast colors.`;
+    // 3. Enhance Prompt for Video - Progressive Reveal Animation
+    const prompt = `${visualPrompt}. Animation style: Begin with minimal elements visible on dark background, then progressively reveal and fade in additional elements one at a time throughout the 4-second duration. Each new element should appear smoothly with fade-in effect. Maintain smooth slow camera motion (subtle zoom or pan). Build from simple to detailed composition. Clean minimalist infographic style with high contrast colors and cinematic reveal pacing.`;
     console.log("Prompt:", prompt);
 
     // 4. Subscribe to Veo 3.1 Fast Video Generation (Faster & Cheaper than Kling)

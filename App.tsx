@@ -18,6 +18,15 @@ const App: React.FC = () => {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [playerStartIndex, setPlayerStartIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [videoExportState, setVideoExportState] = useState<{
+    isExporting: boolean;
+    progress: number;
+    message: string;
+  }>({
+    isExporting: false,
+    progress: 0,
+    message: ''
+  });
 
   // Helper to handle API errors
   const handleApiError = (err: any) => {
@@ -220,7 +229,7 @@ const App: React.FC = () => {
       if (scenesToAnimate.length === 0) return;
 
       setIsProcessing(true);
-      setProgressMessage("Animating scenes with Kling (Parallel)...");
+      setProgressMessage("Animating scenes with Veo 3.1 Fast...");
 
       const CONCURRENCY_LIMIT = 3; // Fal.ai queue handles this well, but let's be polite
       const executing: Promise<void>[] = [];
@@ -314,6 +323,108 @@ const App: React.FC = () => {
         console.error("Failed to download video blob", e);
         // Fallback to direct link opening
         window.open(scene.videoUri, '_blank');
+    }
+  };
+
+  const handleExportFullVideo = async () => {
+    if (!storyboard) return;
+
+    // Validate all scenes have videos
+    const scenesWithVideos = storyboard.scenes.filter(s => s.videoUri);
+    if (scenesWithVideos.length !== storyboard.scenes.length) {
+      setError(`${storyboard.scenes.length - scenesWithVideos.length} scenes still need videos. Click "Animate All" first.`);
+      return;
+    }
+
+    try {
+      setVideoExportState({ isExporting: true, progress: 0, message: 'Preparing export...' });
+      setError(null);
+
+      // Phase 1: Download all videos (0-50%)
+      const videoBlobs: Blob[] = [];
+      for (let i = 0; i < storyboard.scenes.length; i++) {
+        const scene = storyboard.scenes[i];
+        setVideoExportState(prev => ({
+          ...prev,
+          progress: (i / storyboard.scenes.length) * 50,
+          message: `Downloading video ${i + 1}/${storyboard.scenes.length}...`
+        }));
+
+        const response = await fetch(scene.videoUri!);
+        if (!response.ok) {
+          throw new Error(`Failed to download video ${i + 1}. URL may have expired. Try re-animating scenes.`);
+        }
+        const blob = await response.blob();
+        videoBlobs.push(blob);
+      }
+
+      // Phase 2: Load FFmpeg (50-55%)
+      setVideoExportState(prev => ({
+        ...prev,
+        progress: 50,
+        message: 'Loading video processor (one-time download)...'
+      }));
+
+      const { loadFFmpeg } = await import('./services/ffmpegService');
+      await loadFFmpeg((p) => {
+        setVideoExportState(prev => ({
+          ...prev,
+          progress: 50 + p * 5
+        }));
+      });
+
+      // Phase 3: Stitch videos (55-95%)
+      const { stitchVideos } = await import('./services/ffmpegService');
+      const finalBlob = await stitchVideos(videoBlobs, (msg, percent) => {
+        setVideoExportState(prev => ({
+          ...prev,
+          progress: 55 + percent * 0.4,
+          message: msg
+        }));
+      });
+
+      // Phase 4: Download (95-100%)
+      setVideoExportState(prev => ({
+        ...prev,
+        progress: 95,
+        message: 'Preparing download...'
+      }));
+
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeTitle = (storyboard.title || 'story').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      a.download = `${safeTitle}_full_video.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setVideoExportState({
+        isExporting: false,
+        progress: 100,
+        message: 'Complete!'
+      });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setVideoExportState({ isExporting: false, progress: 0, message: '' });
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Video export failed:', err);
+
+      let userMessage = 'Video export failed: ';
+      if (err.message?.includes('fetch') || err.message?.includes('download')) {
+        userMessage += 'Some video URLs may have expired. Try re-animating scenes.';
+      } else if (err.message?.includes('memory')) {
+        userMessage += 'Not enough memory. Try exporting fewer scenes.';
+      } else {
+        userMessage += err.message || 'Unknown error occurred.';
+      }
+
+      setError(userMessage);
+      setVideoExportState({ isExporting: false, progress: 0, message: '' });
     }
   };
 
@@ -435,7 +546,7 @@ const App: React.FC = () => {
                    </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 relative">
                     {hasErrors && !isProcessing && (
                          <button
                             onClick={() => generateImages(storyboard.scenes.filter(s => s.status === 'error' || !s.imageData))}
@@ -467,8 +578,8 @@ const App: React.FC = () => {
                         disabled={!isAllDone || isDownloading}
                         className={`
                             px-4 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all border text-sm
-                            ${isAllDone 
-                                ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-slate-500 hover:text-white shadow-lg' 
+                            ${isAllDone
+                                ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-slate-500 hover:text-white shadow-lg'
                                 : 'bg-slate-900 border-slate-800 text-slate-700 cursor-not-allowed opacity-50'
                             }
                         `}
@@ -476,14 +587,43 @@ const App: React.FC = () => {
                         {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                         Images Zip
                     </button>
-                    
+
+                    {/* Export Full Video Button */}
+                    <button
+                        onClick={handleExportFullVideo}
+                        disabled={
+                            completedVideosCount !== totalCount ||
+                            videoExportState.isExporting ||
+                            isProcessing
+                        }
+                        className={`
+                            px-4 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all border text-sm relative
+                            ${completedVideosCount === totalCount && !videoExportState.isExporting
+                                ? 'bg-purple-600 border-purple-500 text-white hover:bg-purple-500 shadow-lg shadow-purple-500/20'
+                                : 'bg-slate-900 border-slate-800 text-slate-700 cursor-not-allowed opacity-50'
+                            }
+                        `}
+                    >
+                        {videoExportState.isExporting ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                {Math.round(videoExportState.progress)}%
+                            </>
+                        ) : (
+                            <>
+                                <Film size={16} />
+                                Export Full Video
+                            </>
+                        )}
+                    </button>
+
                     <button
                         onClick={() => openPlayer(0)}
                         disabled={!isAllDone}
                         className={`
                             px-6 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all text-sm
-                            ${isAllDone 
-                                ? 'bg-green-500 text-white hover:bg-green-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95' 
+                            ${isAllDone
+                                ? 'bg-green-500 text-white hover:bg-green-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95'
                                 : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
                             }
                         `}
@@ -491,6 +631,13 @@ const App: React.FC = () => {
                         <PlayCircle size={18} fill="currentColor" className={isAllDone ? "text-white" : "text-slate-600"} />
                         {isAllDone ? "Play Story" : `Generating ${completedImagesCount}/${totalCount}`}
                     </button>
+
+                    {/* Progress Message for Video Export */}
+                    {videoExportState.isExporting && videoExportState.message && (
+                        <p className="text-xs text-purple-400 font-mono animate-pulse absolute -bottom-6 left-0 right-0 text-center">
+                            {videoExportState.message}
+                        </p>
+                    )}
                 </div>
               </div>
 
