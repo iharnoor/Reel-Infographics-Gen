@@ -1,0 +1,5 @@
+{
+  "name": "Reels  Nano Banana Script-to-Story",
+  "description": "Converts text scripts into animated 9:16 infographic video stories using Gemini 3 Pro.",
+  "requestFramePermissions": []
+}
