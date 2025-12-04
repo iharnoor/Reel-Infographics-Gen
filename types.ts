@@ -4,6 +4,7 @@ export interface Scene {
   visualPrompt: string;
   imageData?: string; // Base64 string
   videoUri?: string; // URI for the generated video
+  videoBlob?: Blob; // Cached video blob (prevents URL expiration issues)
   duration: number; // Duration in seconds for this slide
   status: 'pending' | 'generating' | 'completed' | 'error';
   videoStatus: 'none' | 'generating' | 'completed' | 'error';

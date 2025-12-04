@@ -21,16 +21,25 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
   const model = "gemini-2.5-flash";
 
   const systemInstruction = `
-    You are an expert storyboard artist and infographic designer. 
-    Your goal is to break down a video script into a series of 9:16 vertical infographic scenes.
-    
+    You are an expert storyboard artist and modern infographic designer.
+    Your goal is to break down a video script into a series of 9:16 vertical infographic scenes with clean, balanced design.
+
     1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
     2. For each segment, provide the 'text' (the exact part of the script being spoken).
-    3. For each segment, provide a 'visualPrompt'. This prompt will be used to generate a high-quality 9:16 image.
-       The visual prompt should describe a "cool, modern, tech-focused infographic poster" style.
-       Include keywords like: "vector art", "data visualization", "minimalist icons", "bold typography", "neon accents", "dark background".
-       Make sure the visual relates directly to the script segment. 
-       Describe elements that can appear sequentially (e.g. "three steps", "growth chart", "connecting nodes").
+    3. For each segment, provide a 'visualPrompt' following these BALANCED design rules:
+       - Describe 3-5 key visual elements (not too empty, not too cluttered)
+       - Use clean geometric shapes, simple icons, and minimal text
+       - Include one clear focal point with supporting elements
+       - IMPORTANT: Choose background color based on topic/tone:
+         * Tech/Innovation/Future: Deep blue or dark navy background
+         * Energy/Positive/Growth: White or light cream background
+         * Urgent/Important/Alert: Deep red or burgundy background
+         * Nature/Health/Calm: Soft green or teal background
+         * Finance/Premium/Professional: Dark charcoal or rich purple background
+       - Specify HIGH CONTRAST colors: dark backgrounds need bright/vibrant elements, light backgrounds need bold dark elements
+       - Modern, professional look - like a polished tech presentation
+       - Example good prompts: "white background, bold black icons with electric blue accents" or "deep navy background, bright yellow chart with white text"
+       - Always mention the background color first in your prompt
     4. Provide a title for the whole story.
   `;
 
@@ -115,7 +124,7 @@ export const generateSceneImage = async (prompt: string): Promise<string> => {
   // Use Nano Banana Pro (Gemini 3 Pro Image) for high quality
   const model = "gemini-3-pro-image-preview";
 
-  const enhancedPrompt = `${prompt} . Vertical 9:16 aspect ratio. High quality, 4k, trending on artstation, infographic style, flat design with depth, dark mode, vibrant yellow and cyan accents, clean layout and less wordy, more visual.`;
+  const enhancedPrompt = `${prompt}. Vertical 9:16 aspect ratio. Modern clean infographic style: 3-5 well-spaced visual elements, clear focal point with supporting details, balanced composition with breathing room, crisp geometric shapes and simple icons, minimal text (key words only), HIGH CONTRAST colors (ensure elements pop against background), flat design with subtle depth, organized layout, professional and polished look. Use the background color specified in the description. Not too crowded but not empty.`;
 
   const response = await ai.models.generateContent({
     model,
@@ -186,8 +195,8 @@ export const generateSceneVideo = async (imageB64: string, visualPrompt: string)
     const imageUrl = await fal.storage.upload(imageBlob);
     console.log("Image uploaded:", imageUrl);
 
-    // 3. Enhance Prompt for Video - Progressive Reveal Animation
-    const prompt = `${visualPrompt}. Animation style: Begin with minimal elements visible on dark background, then progressively reveal and fade in additional elements one at a time throughout the 4-second duration. Each new element should appear smoothly with fade-in effect. Maintain smooth slow camera motion (subtle zoom or pan). Build from simple to detailed composition. Clean minimalist infographic style with high contrast colors and cinematic reveal pacing.`;
+    // 3. Enhance Prompt for Video - Balanced Progressive Animation
+    const prompt = `${visualPrompt}. Balanced modern animation: Start with solid color background showing main focal point, then progressively reveal 3-4 supporting elements one at a time with smooth fade-in transitions. Gentle camera motion (subtle zoom or pan), clean composition with good spacing between elements. HIGH CONTRAST throughout - elements must clearly stand out from background. Each new element appears with purpose, building a complete but organized scene. Professional infographic style with smooth pacing. Maintain the background color from the image. 4 seconds total.`;
     console.log("Prompt:", prompt);
 
     // 4. Subscribe to Veo 3.1 Fast Video Generation (Faster & Cheaper than Kling)

@@ -192,9 +192,22 @@ const App: React.FC = () => {
     while (!success && retries < MAX_RETRIES) {
         try {
             const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt);
+
+            // Immediately fetch and cache the video blob to avoid URL expiration
+            let videoBlob: Blob | undefined;
+            try {
+                const response = await fetch(videoUri);
+                if (response.ok) {
+                    videoBlob = await response.blob();
+                    console.log(`Cached video blob for scene ${sceneId}, size: ${videoBlob.size} bytes`);
+                }
+            } catch (blobErr) {
+                console.warn(`Failed to cache blob for scene ${sceneId}, will rely on URL`, blobErr);
+            }
+
             setStoryboard(prev => prev ? {
                 ...prev,
-                scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, videoStatus: 'completed', videoUri } : s)
+                scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, videoStatus: 'completed', videoUri, videoBlob } : s)
             } : null);
             success = true;
         } catch (err: any) {
@@ -340,22 +353,31 @@ const App: React.FC = () => {
       setVideoExportState({ isExporting: true, progress: 0, message: 'Preparing export...' });
       setError(null);
 
-      // Phase 1: Download all videos (0-50%)
+      // Phase 1: Get all videos (use cached blobs or download if needed) (0-50%)
       const videoBlobs: Blob[] = [];
       for (let i = 0; i < storyboard.scenes.length; i++) {
         const scene = storyboard.scenes[i];
         setVideoExportState(prev => ({
           ...prev,
           progress: (i / storyboard.scenes.length) * 50,
-          message: `Downloading video ${i + 1}/${storyboard.scenes.length}...`
+          message: `Preparing video ${i + 1}/${storyboard.scenes.length}...`
         }));
 
-        const response = await fetch(scene.videoUri!);
-        if (!response.ok) {
-          throw new Error(`Failed to download video ${i + 1}. URL may have expired. Try re-animating scenes.`);
+        // Use cached blob if available, otherwise fetch from URL
+        if (scene.videoBlob) {
+          console.log(`Using cached blob for scene ${i + 1}`);
+          videoBlobs.push(scene.videoBlob);
+        } else if (scene.videoUri) {
+          console.log(`Fetching video from URL for scene ${i + 1}`);
+          const response = await fetch(scene.videoUri);
+          if (!response.ok) {
+            throw new Error(`Failed to download video ${i + 1}. URL may have expired. Try re-animating this scene.`);
+          }
+          const blob = await response.blob();
+          videoBlobs.push(blob);
+        } else {
+          throw new Error(`Scene ${i + 1} has no video. Please animate all scenes first.`);
         }
-        const blob = await response.blob();
-        videoBlobs.push(blob);
       }
 
       // Phase 2: Load FFmpeg (50-55%)
@@ -590,6 +612,7 @@ const App: React.FC = () => {
 
                     {/* Export Full Video Button */}
                     <button
+                        type="button"
                         onClick={handleExportFullVideo}
                         disabled={
                             completedVideosCount !== totalCount ||
