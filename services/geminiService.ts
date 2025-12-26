@@ -11,7 +11,7 @@ fal.config({
   credentials: FAL_KEY,
 });
 
-export const analyzeScript = async (script: string, totalTargetSeconds: number = 60): Promise<Storyboard> => {
+export const analyzeScript = async (script: string, totalTargetSeconds: number = 60, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<Storyboard> => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key not found");
 
@@ -20,8 +20,19 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
   // Use Flash for logic/text processing
   const model = "gemini-2.5-flash";
 
+  const textGuidance = aspectRatio === "16:9"
+    ? `For 16:9 horizontal format, you can include more text overlays that provide context:
+       - Add relevant labels, captions, or key terms that enhance understanding
+       - Include data points, statistics, or key facts when relevant to the content
+       - Use clear hierarchical text placement (title, subtitle, supporting text)
+       - Text should be context-driven and informative, not marketing fluff
+       - Position text to complement the 3D elements, typically on the sides or bottom third`
+    : `For 9:16 vertical format, keep text minimal and clean:
+       - Use concise labels or single key terms
+       - Keep text simple and focused`;
+
   const systemInstruction = `
-    You are an expert storyboard artist and minimalist 3D designer specializing in clean SaaS visuals.
+    You are an expert storyboard artist and minimalist 3D designer.
     Your goal is to break down a video script into a series of infographic scenes with clean, minimal 3D design.
 
     1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
@@ -30,7 +41,6 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
        - Describe 3-5 simple 3D elements (rounded squares, circles, cylinders, simple geometric shapes)
        - Use neutral backgrounds (beige, cream, soft gray, light tan, pale colors)
        - Include one clear focal point with simple supporting elements
-       - Design works for both vertical (9:16) and horizontal (16:9) orientations
        - IMPORTANT: Choose soft, professional colors:
          * Main elements: Dark navy, charcoal, or matte black 3D shapes
          * Accent colors: Warm orange, coral, soft blue, or pastel highlights
@@ -39,7 +49,7 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
        - Minimal icons and symbols: simple user icons, basic shapes, clean typography
        - Soft diffused lighting with gentle shadows (no harsh contrasts)
        - Clean composition with lots of breathing room and whitespace
-       - Professional SaaS aesthetic - like modern tech company branding
+       - ${textGuidance}
        - Example good prompts: "beige background, dark navy 3D rounded squares with simple white icons, orange accent sphere in center, soft shadows, clean minimal composition" or "cream background, matte black 3D cylinders arranged in pattern, coral accent elements, gentle lighting, professional and minimal"
        - Always mention the neutral background color first in your prompt
     4. Provide a title for the whole story.
@@ -127,7 +137,11 @@ export const generateSceneImage = async (prompt: string, aspectRatio: "9:16" | "
   const model = "gemini-3-pro-image-preview";
 
   const orientationText = aspectRatio === "9:16" ? "Vertical 9:16" : "Horizontal 16:9";
-  const enhancedPrompt = `${prompt}. ${orientationText} aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, modern SaaS aesthetic like tech company branding, minimal text (clean sans-serif typography), organized balanced layout. Professional, clean, and approachable look.`;
+  const textInstructions = aspectRatio === "16:9"
+    ? "Include context-driven text overlays with clear hierarchy (titles, labels, key terms) that enhance understanding, positioned to complement the 3D elements"
+    : "Minimal text labels with clean sans-serif typography";
+
+  const enhancedPrompt = `${prompt}. ${orientationText} aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, ${textInstructions}, organized balanced layout. Professional, clean, and approachable look.`;
 
   const response = await ai.models.generateContent({
     model,

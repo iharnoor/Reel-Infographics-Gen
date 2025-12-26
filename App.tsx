@@ -51,9 +51,9 @@ const App: React.FC = () => {
     setError(null);
     setForceKeySelection(false);
     setProgressMessage("Analyzing script and planning scenes...");
-    
+
     try {
-      const data = await analyzeScript(script, 60);
+      const data = await analyzeScript(script, 60, aspectRatio);
       setStoryboard(data);
       // Start parallel generation
       generateImages(data.scenes);
