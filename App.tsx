@@ -9,8 +9,9 @@ import JSZip from 'jszip';
 const App: React.FC = () => {
   const [apiKeyReady, setApiKeyReady] = useState(false);
   const [forceKeySelection, setForceKeySelection] = useState(false);
-  
+
   const [script, setScript] = useState("");
+  const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");
   const [storyboard, setStoryboard] = useState<Storyboard | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMessage, setProgressMessage] = useState("");
@@ -86,8 +87,8 @@ const App: React.FC = () => {
         });
 
         try {
-          const base64Data = await generateSceneImage(scene.visualPrompt);
-          
+          const base64Data = await generateSceneImage(scene.visualPrompt, aspectRatio);
+
           setStoryboard(prev => {
             if (!prev) return null;
             return {
@@ -191,7 +192,7 @@ const App: React.FC = () => {
 
     while (!success && retries < MAX_RETRIES) {
         try {
-            const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt);
+            const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt, aspectRatio);
 
             // Immediately fetch and cache the video blob to avoid URL expiration
             let videoBlob: Blob | undefined;
@@ -484,6 +485,38 @@ const App: React.FC = () => {
             <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-semibold">Infographic Story Engine</p>
           </div>
         </div>
+
+        {/* Aspect Ratio Toggle */}
+        <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl p-1 border border-slate-700">
+          <button
+            onClick={() => setAspectRatio("9:16")}
+            disabled={isProcessing}
+            className={`
+              px-4 py-2 rounded-lg text-xs font-bold transition-all
+              ${aspectRatio === "9:16"
+                ? 'bg-yellow-500 text-slate-900 shadow-lg'
+                : 'text-slate-400 hover:text-slate-200'
+              }
+              ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
+            `}
+          >
+            9:16 Vertical
+          </button>
+          <button
+            onClick={() => setAspectRatio("16:9")}
+            disabled={isProcessing}
+            className={`
+              px-4 py-2 rounded-lg text-xs font-bold transition-all
+              ${aspectRatio === "16:9"
+                ? 'bg-yellow-500 text-slate-900 shadow-lg'
+                : 'text-slate-400 hover:text-slate-200'
+              }
+              ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
+            `}
+          >
+            16:9 Horizontal
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -670,7 +703,7 @@ const App: React.FC = () => {
                   <div key={scene.id} className="relative group perspective">
                     {/* Card */}
                     <div className={`
-                        aspect-[9/16] rounded-xl overflow-hidden border relative shadow-xl transition-all duration-300
+                        ${aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-[16/9]"} rounded-xl overflow-hidden border relative shadow-xl transition-all duration-300
                         ${scene.status === 'error' ? 'border-red-500/50 bg-red-950/10' : 'border-slate-800 bg-slate-900'}
                         group-hover:shadow-[0_0_25px_rgba(250,204,21,0.1)] group-hover:border-yellow-500/30
                     `}>

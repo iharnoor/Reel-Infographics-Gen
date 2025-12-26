@@ -22,7 +22,7 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
 
   const systemInstruction = `
     You are an expert storyboard artist and minimalist 3D designer specializing in clean SaaS visuals.
-    Your goal is to break down a video script into a series of 9:16 vertical infographic scenes with clean, minimal 3D design.
+    Your goal is to break down a video script into a series of infographic scenes with clean, minimal 3D design.
 
     1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
     2. For each segment, provide the 'text' (the exact part of the script being spoken).
@@ -30,6 +30,7 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
        - Describe 3-5 simple 3D elements (rounded squares, circles, cylinders, simple geometric shapes)
        - Use neutral backgrounds (beige, cream, soft gray, light tan, pale colors)
        - Include one clear focal point with simple supporting elements
+       - Design works for both vertical (9:16) and horizontal (16:9) orientations
        - IMPORTANT: Choose soft, professional colors:
          * Main elements: Dark navy, charcoal, or matte black 3D shapes
          * Accent colors: Warm orange, coral, soft blue, or pastel highlights
@@ -116,7 +117,7 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
   };
 };
 
-export const generateSceneImage = async (prompt: string): Promise<string> => {
+export const generateSceneImage = async (prompt: string, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<string> => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key not found");
 
@@ -125,7 +126,8 @@ export const generateSceneImage = async (prompt: string): Promise<string> => {
   // Use Nano Banana Pro (Gemini 3 Pro Image) for high quality
   const model = "gemini-3-pro-image-preview";
 
-  const enhancedPrompt = `${prompt}. Vertical 9:16 aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, modern SaaS aesthetic like tech company branding, minimal text (clean sans-serif typography), organized balanced layout. Professional, clean, and approachable look.`;
+  const orientationText = aspectRatio === "9:16" ? "Vertical 9:16" : "Horizontal 16:9";
+  const enhancedPrompt = `${prompt}. ${orientationText} aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, modern SaaS aesthetic like tech company branding, minimal text (clean sans-serif typography), organized balanced layout. Professional, clean, and approachable look.`;
 
   const response = await ai.models.generateContent({
     model,
@@ -134,8 +136,8 @@ export const generateSceneImage = async (prompt: string): Promise<string> => {
     },
     config: {
       imageConfig: {
-        aspectRatio: "9:16",
-        imageSize: "1K" 
+        aspectRatio: aspectRatio,
+        imageSize: "1K"
       }
     }
   });
@@ -182,7 +184,7 @@ const compressImageToBlob = async (base64Str: string, quality = 0.85): Promise<B
   });
 };
 
-export const generateSceneVideo = async (imageB64: string, visualPrompt: string): Promise<string> => {
+export const generateSceneVideo = async (imageB64: string, visualPrompt: string, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<string> => {
   try {
     console.log("Starting video generation...");
 
@@ -207,7 +209,7 @@ export const generateSceneVideo = async (imageB64: string, visualPrompt: string)
         prompt: prompt,
         image_url: imageUrl,
         duration: "4s", // Veo 3.1 supports 4s, 6s, or 8s
-        aspect_ratio: "9:16",
+        aspect_ratio: aspectRatio,
         generate_audio: false, // Disable audio for speed and lower cost
         resolution: "720p"
       },
