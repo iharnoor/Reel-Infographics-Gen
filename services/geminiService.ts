@@ -21,25 +21,26 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
   const model = "gemini-2.5-flash";
 
   const systemInstruction = `
-    You are an expert storyboard artist and modern infographic designer.
-    Your goal is to break down a video script into a series of 9:16 vertical infographic scenes with clean, balanced design.
+    You are an expert storyboard artist and minimalist 3D designer specializing in clean SaaS visuals.
+    Your goal is to break down a video script into a series of 9:16 vertical infographic scenes with clean, minimal 3D design.
 
     1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
     2. For each segment, provide the 'text' (the exact part of the script being spoken).
-    3. For each segment, provide a 'visualPrompt' following these BALANCED design rules:
-       - Describe 3-5 key visual elements (not too empty, not too cluttered)
-       - Use clean geometric shapes, simple icons, and minimal text
-       - Include one clear focal point with supporting elements
-       - IMPORTANT: Choose background color based on topic/tone:
-         * Tech/Innovation/Future: Deep blue or dark navy background
-         * Energy/Positive/Growth: White or light cream background
-         * Urgent/Important/Alert: Deep red or burgundy background
-         * Nature/Health/Calm: Soft green or teal background
-         * Finance/Premium/Professional: Dark charcoal or rich purple background
-       - Specify HIGH CONTRAST colors: dark backgrounds need bright/vibrant elements, light backgrounds need bold dark elements
-       - Modern, professional look - like a polished tech presentation
-       - Example good prompts: "white background, bold black icons with electric blue accents" or "deep navy background, bright yellow chart with white text"
-       - Always mention the background color first in your prompt
+    3. For each segment, provide a 'visualPrompt' following these CLEAN MINIMAL design rules:
+       - Describe 3-5 simple 3D elements (rounded squares, circles, cylinders, simple geometric shapes)
+       - Use neutral backgrounds (beige, cream, soft gray, light tan, pale colors)
+       - Include one clear focal point with simple supporting elements
+       - IMPORTANT: Choose soft, professional colors:
+         * Main elements: Dark navy, charcoal, or matte black 3D shapes
+         * Accent colors: Warm orange, coral, soft blue, or pastel highlights
+         * Backgrounds: Always neutral and soft (beige, cream, light gray)
+       - Apply clean 3D style: rounded corners, soft shadows, subtle depth, professional lighting
+       - Minimal icons and symbols: simple user icons, basic shapes, clean typography
+       - Soft diffused lighting with gentle shadows (no harsh contrasts)
+       - Clean composition with lots of breathing room and whitespace
+       - Professional SaaS aesthetic - like modern tech company branding
+       - Example good prompts: "beige background, dark navy 3D rounded squares with simple white icons, orange accent sphere in center, soft shadows, clean minimal composition" or "cream background, matte black 3D cylinders arranged in pattern, coral accent elements, gentle lighting, professional and minimal"
+       - Always mention the neutral background color first in your prompt
     4. Provide a title for the whole story.
   `;
 
@@ -124,7 +125,7 @@ export const generateSceneImage = async (prompt: string): Promise<string> => {
   // Use Nano Banana Pro (Gemini 3 Pro Image) for high quality
   const model = "gemini-3-pro-image-preview";
 
-  const enhancedPrompt = `${prompt}. Vertical 9:16 aspect ratio. Modern clean infographic style: 3-5 well-spaced visual elements, clear focal point with supporting details, balanced composition with breathing room, crisp geometric shapes and simple icons, minimal text (key words only), HIGH CONTRAST colors (ensure elements pop against background), flat design with subtle depth, organized layout, professional and polished look. Use the background color specified in the description. Not too crowded but not empty.`;
+  const enhancedPrompt = `${prompt}. Vertical 9:16 aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, modern SaaS aesthetic like tech company branding, minimal text (clean sans-serif typography), organized balanced layout. Professional, clean, and approachable look.`;
 
   const response = await ai.models.generateContent({
     model,
@@ -195,8 +196,8 @@ export const generateSceneVideo = async (imageB64: string, visualPrompt: string)
     const imageUrl = await fal.storage.upload(imageBlob);
     console.log("Image uploaded:", imageUrl);
 
-    // 3. Enhance Prompt for Video - Balanced Progressive Animation
-    const prompt = `${visualPrompt}. Balanced modern animation: Start with solid color background showing main focal point, then progressively reveal 3-4 supporting elements one at a time with smooth fade-in transitions. Gentle camera motion (subtle zoom or pan), clean composition with good spacing between elements. HIGH CONTRAST throughout - elements must clearly stand out from background. Each new element appears with purpose, building a complete but organized scene. Professional infographic style with smooth pacing. Maintain the background color from the image. 4 seconds total.`;
+    // 3. Enhance Prompt for Video - Clean Minimal Animation
+    const prompt = `${visualPrompt}. Clean minimal 3D animation: Start with neutral soft background, main 3D element gently fades in and settles into place, then progressively reveal 3-4 supporting elements one at a time with smooth fade-in. Subtle gentle camera motion (slight rotation or slow push in), elements smoothly animate into position with soft easing, gentle shadows appear as elements settle. Soft consistent lighting throughout with gentle highlights on 3D shapes. Each element appears with purpose and clean timing. Maintain clean minimal aesthetic with rounded 3D shapes, professional soft shadows, and breathing room between elements. Ultra crisp quality, smooth motion. Maintain neutral background and clean composition from the image. 4 seconds total.`;
     console.log("Prompt:", prompt);
 
     // 4. Subscribe to Veo 3.1 Fast Video Generation (Faster & Cheaper than Kling)
