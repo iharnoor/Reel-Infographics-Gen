@@ -6,6 +6,7 @@ interface PlayerProps {
   scenes: Scene[];
   onClose: () => void;
   startIndex?: number;
+  aspectRatio?: "9:16" | "16:9";
 }
 
 // Helper to authenticated video URLs
@@ -116,7 +117,7 @@ const Slide = React.memo(({ scene, isActive, progress, zIndex }: SlideProps) => 
 
 // --- Main Player Component ---
 
-export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0 }) => {
+export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0, aspectRatio = "9:16" }) => {
   const [currentSceneIndex, setCurrentSceneIndex] = useState(startIndex);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
@@ -195,10 +196,13 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0 
     startTimeRef.current = Date.now();
   };
 
+  const frameAspectClass = aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-[16/9]";
+  const frameHeightClass = aspectRatio === "9:16" ? "h-[90vh]" : "w-[90vw] max-w-[1200px]";
+
   return (
     <div className="fixed inset-0 z-40 bg-black/95 flex items-center justify-center backdrop-blur-sm animate-fade-in">
-      {/* Phone Frame Container */}
-      <div className="relative h-[90vh] aspect-[9/16] bg-slate-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(250,204,21,0.2)] border-4 border-slate-800 ring-1 ring-white/10">
+      {/* Frame Container */}
+      <div className={`relative ${frameHeightClass} ${frameAspectClass} bg-slate-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(250,204,21,0.2)] border-4 border-slate-800 ring-1 ring-white/10`}>
         
         {/* Scenes Stack */}
         <div className="absolute inset-0 w-full h-full">

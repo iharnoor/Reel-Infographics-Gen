@@ -11,7 +11,7 @@ fal.config({
   credentials: FAL_KEY,
 });
 
-export const analyzeScript = async (script: string, totalTargetSeconds: number = 60, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<Storyboard> => {
+export const analyzeScript = async (script: string, totalTargetSeconds: number = 60, aspectRatio: "9:16" | "16:9" = "9:16", isDramatic: boolean = false): Promise<Storyboard> => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key not found");
 
@@ -31,13 +31,20 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
        - Use concise labels or single key terms
        - Keep text simple and focused`;
 
-  const systemInstruction = `
-    You are an expert storyboard artist and minimalist 3D designer.
-    Your goal is to break down a video script into a series of infographic scenes with clean, minimal 3D design.
-
-    1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
-    2. For each segment, provide the 'text' (the exact part of the script being spoken).
-    3. For each segment, provide a 'visualPrompt' following these CLEAN MINIMAL design rules:
+  const visualStyle = isDramatic
+    ? `DRAMATIC MODE - Create cinematic, emotional visuals with human subjects:
+       - Feature South Asian Americans (desis living in USA) as main subjects
+       - Use dramatic lighting: golden hour, rim lighting, strong directional light, moody shadows
+       - Rich color grading: warm tones, cinematic color palettes, high contrast
+       - Dynamic compositions: interesting angles, depth of field, layered scenes
+       - Emotional expressions and body language that convey the story
+       - Contextual settings: modern American environments (offices, homes, urban spaces, tech settings)
+       - Cinematic atmosphere: film-like quality, dramatic storytelling through visuals
+       - Professional photography style with depth and texture
+       - Include relevant props and environmental details that enhance the narrative
+       - Use dramatic weather or atmospheric elements when appropriate (fog, sunset, city lights)
+       - Example: "South Asian woman in professional attire standing confidently in modern glass office, dramatic golden hour lighting streaming through windows, cinematic composition with warm color grading, depth of field with blurred city skyline background, film-like quality"`
+    : `MINIMAL MODE - Clean, minimal 3D design:
        - Describe 3-5 simple 3D elements (rounded squares, circles, cylinders, simple geometric shapes)
        - Use neutral backgrounds (beige, cream, soft gray, light tan, pale colors)
        - Include one clear focal point with simple supporting elements
@@ -49,9 +56,18 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
        - Minimal icons and symbols: simple user icons, basic shapes, clean typography
        - Soft diffused lighting with gentle shadows (no harsh contrasts)
        - Clean composition with lots of breathing room and whitespace
+       - Example: "beige background, dark navy 3D rounded squares with simple white icons, orange accent sphere in center, soft shadows, clean minimal composition"`;
+
+  const systemInstruction = `
+    You are an expert storyboard artist and visual designer.
+    Your goal is to break down a video script into a series of compelling scenes.
+
+    1. Break the script into segments. Each segment should represent roughly 5-7 seconds of narration.
+    2. For each segment, provide the 'text' (the exact part of the script being spoken).
+    3. For each segment, provide a 'visualPrompt' following these design rules:
+       ${visualStyle}
        - ${textGuidance}
-       - Example good prompts: "beige background, dark navy 3D rounded squares with simple white icons, orange accent sphere in center, soft shadows, clean minimal composition" or "cream background, matte black 3D cylinders arranged in pattern, coral accent elements, gentle lighting, professional and minimal"
-       - Always mention the neutral background color first in your prompt
+       - Always mention the background/setting first in your prompt
     4. Provide a title for the whole story.
   `;
 
@@ -127,7 +143,7 @@ export const analyzeScript = async (script: string, totalTargetSeconds: number =
   };
 };
 
-export const generateSceneImage = async (prompt: string, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<string> => {
+export const generateSceneImage = async (prompt: string, aspectRatio: "9:16" | "16:9" = "9:16", isDramatic: boolean = false): Promise<string> => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key not found");
 
@@ -138,10 +154,12 @@ export const generateSceneImage = async (prompt: string, aspectRatio: "9:16" | "
 
   const orientationText = aspectRatio === "9:16" ? "Vertical 9:16" : "Horizontal 16:9";
   const textInstructions = aspectRatio === "16:9"
-    ? "Include context-driven text overlays with clear hierarchy (titles, labels, key terms) that enhance understanding, positioned to complement the 3D elements"
+    ? "Include context-driven text overlays with clear hierarchy (titles, labels, key terms) that enhance understanding, positioned to complement the visuals"
     : "Minimal text labels with clean sans-serif typography";
 
-  const enhancedPrompt = `${prompt}. ${orientationText} aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, ${textInstructions}, organized balanced layout. Professional, clean, and approachable look.`;
+  const enhancedPrompt = isDramatic
+    ? `${prompt}. ${orientationText} aspect ratio. Cinematic dramatic photography: South Asian American subjects, dramatic lighting (golden hour, rim lighting, moody shadows), rich color grading with warm tones and high contrast, dynamic composition with interesting angles and depth of field, emotional storytelling, modern American settings (offices, homes, urban spaces, tech environments), film-like quality with professional photography style, atmospheric details (city lights, sunset, fog), layered scenes with depth and texture, ${textInstructions}. Ultra sharp, cinematic, photorealistic.`
+    : `${prompt}. ${orientationText} aspect ratio. Clean minimal 3D style: neutral soft background (beige/cream/soft gray), 3-5 simple 3D geometric elements (rounded squares, circles, cylinders) with soft shadows, dark navy or matte black main shapes with white simple icons, warm accent colors (orange, coral, or pastels), gentle diffused lighting, clean composition with breathing room and whitespace, professional depth with subtle 3D perspective, smooth rounded corners on all elements, soft drop shadows, ultra crisp rendering, ${textInstructions}, organized balanced layout. Professional, clean, and approachable look.`;
 
   const response = await ai.models.generateContent({
     model,
@@ -198,7 +216,7 @@ const compressImageToBlob = async (base64Str: string, quality = 0.85): Promise<B
   });
 };
 
-export const generateSceneVideo = async (imageB64: string, visualPrompt: string, aspectRatio: "9:16" | "16:9" = "9:16"): Promise<string> => {
+export const generateSceneVideo = async (imageB64: string, visualPrompt: string, aspectRatio: "9:16" | "16:9" = "9:16", isDramatic: boolean = false): Promise<string> => {
   try {
     console.log("Starting video generation...");
 
@@ -212,8 +230,10 @@ export const generateSceneVideo = async (imageB64: string, visualPrompt: string,
     const imageUrl = await fal.storage.upload(imageBlob);
     console.log("Image uploaded:", imageUrl);
 
-    // 3. Enhance Prompt for Video - Clean Minimal Animation
-    const prompt = `${visualPrompt}. Clean minimal 3D animation: Start with neutral soft background, main 3D element gently fades in and settles into place, then progressively reveal 3-4 supporting elements one at a time with smooth fade-in. Subtle gentle camera motion (slight rotation or slow push in), elements smoothly animate into position with soft easing, gentle shadows appear as elements settle. Soft consistent lighting throughout with gentle highlights on 3D shapes. Each element appears with purpose and clean timing. Maintain clean minimal aesthetic with rounded 3D shapes, professional soft shadows, and breathing room between elements. Ultra crisp quality, smooth motion. Maintain neutral background and clean composition from the image. 4 seconds total.`;
+    // 3. Enhance Prompt for Video based on mode
+    const prompt = isDramatic
+      ? `${visualPrompt}. Dramatic cinematic motion: Slow cinematic camera movement (subtle dolly push or gentle pan), natural human movement (subtle head turn, eye blink, slight body shift), atmospheric elements subtly moving (light rays, fog, background motion), dynamic lighting shifts creating depth and emotion, film-like color grading maintaining warmth and contrast, smooth professional camera work, emotional storytelling through motion, maintain photorealistic quality and depth of field. 4 seconds total.`
+      : `${visualPrompt}. Clean minimal 3D animation: Start with neutral soft background, main 3D element gently fades in and settles into place, then progressively reveal 3-4 supporting elements one at a time with smooth fade-in. Subtle gentle camera motion (slight rotation or slow push in), elements smoothly animate into position with soft easing, gentle shadows appear as elements settle. Soft consistent lighting throughout with gentle highlights on 3D shapes. Each element appears with purpose and clean timing. Maintain clean minimal aesthetic with rounded 3D shapes, professional soft shadows, and breathing room between elements. Ultra crisp quality, smooth motion. Maintain neutral background and clean composition from the image. 4 seconds total.`;
     console.log("Prompt:", prompt);
 
     // 4. Subscribe to Veo 3.1 Fast Video Generation (Faster & Cheaper than Kling)

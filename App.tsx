@@ -12,6 +12,7 @@ const App: React.FC = () => {
 
   const [script, setScript] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");
+  const [isDramatic, setIsDramatic] = useState(false);
   const [storyboard, setStoryboard] = useState<Storyboard | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMessage, setProgressMessage] = useState("");
@@ -53,7 +54,7 @@ const App: React.FC = () => {
     setProgressMessage("Analyzing script and planning scenes...");
 
     try {
-      const data = await analyzeScript(script, 60, aspectRatio);
+      const data = await analyzeScript(script, 60, aspectRatio, isDramatic);
       setStoryboard(data);
       // Start parallel generation
       generateImages(data.scenes);
@@ -87,7 +88,7 @@ const App: React.FC = () => {
         });
 
         try {
-          const base64Data = await generateSceneImage(scene.visualPrompt, aspectRatio);
+          const base64Data = await generateSceneImage(scene.visualPrompt, aspectRatio, isDramatic);
 
           setStoryboard(prev => {
             if (!prev) return null;
@@ -192,7 +193,7 @@ const App: React.FC = () => {
 
     while (!success && retries < MAX_RETRIES) {
         try {
-            const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt, aspectRatio);
+            const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt, aspectRatio, isDramatic);
 
             // Immediately fetch and cache the video blob to avoid URL expiration
             let videoBlob: Blob | undefined;
@@ -486,35 +487,54 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Aspect Ratio Toggle */}
-        <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl p-1 border border-slate-700">
+        {/* Toggles */}
+        <div className="flex items-center gap-3">
+          {/* Aspect Ratio Toggle */}
+          <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl p-1 border border-slate-700">
+            <button
+              onClick={() => setAspectRatio("9:16")}
+              disabled={isProcessing}
+              className={`
+                px-4 py-2 rounded-lg text-xs font-bold transition-all
+                ${aspectRatio === "9:16"
+                  ? 'bg-yellow-500 text-slate-900 shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200'
+                }
+                ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
+              `}
+            >
+              9:16 Vertical
+            </button>
+            <button
+              onClick={() => setAspectRatio("16:9")}
+              disabled={isProcessing}
+              className={`
+                px-4 py-2 rounded-lg text-xs font-bold transition-all
+                ${aspectRatio === "16:9"
+                  ? 'bg-yellow-500 text-slate-900 shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200'
+                }
+                ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
+              `}
+            >
+              16:9 Horizontal
+            </button>
+          </div>
+
+          {/* Dramatic Mode Toggle */}
           <button
-            onClick={() => setAspectRatio("9:16")}
+            onClick={() => setIsDramatic(!isDramatic)}
             disabled={isProcessing}
             className={`
-              px-4 py-2 rounded-lg text-xs font-bold transition-all
-              ${aspectRatio === "9:16"
-                ? 'bg-yellow-500 text-slate-900 shadow-lg'
-                : 'text-slate-400 hover:text-slate-200'
+              px-4 py-2 rounded-lg text-xs font-bold transition-all border
+              ${isDramatic
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg border-purple-500'
+                : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 border-slate-700'
               }
               ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
             `}
           >
-            9:16 Vertical
-          </button>
-          <button
-            onClick={() => setAspectRatio("16:9")}
-            disabled={isProcessing}
-            className={`
-              px-4 py-2 rounded-lg text-xs font-bold transition-all
-              ${aspectRatio === "16:9"
-                ? 'bg-yellow-500 text-slate-900 shadow-lg'
-                : 'text-slate-400 hover:text-slate-200'
-              }
-              ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
-            `}
-          >
-            16:9 Horizontal
+            {isDramatic ? '✨ Dramatic' : 'Dramatic'}
           </button>
         </div>
       </header>
@@ -832,10 +852,11 @@ const App: React.FC = () => {
 
       {/* Fullscreen Player Overlay */}
       {isPlayerOpen && storyboard && (
-        <Player 
-            scenes={storyboard.scenes} 
+        <Player
+            scenes={storyboard.scenes}
             startIndex={playerStartIndex}
-            onClose={() => setIsPlayerOpen(false)} 
+            aspectRatio={aspectRatio}
+            onClose={() => setIsPlayerOpen(false)}
         />
       )}
     </div>
