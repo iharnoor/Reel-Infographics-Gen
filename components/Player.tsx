@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Scene } from '../types';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, X } from 'lucide-react';
 
 interface PlayerProps {
   scenes: Scene[];
@@ -17,11 +17,10 @@ const getAuthenticatedVideoSrc = (uri: string) => {
 };
 
 // --- Individual Slide Component ---
-// Memoized to prevent re-rendering inactive slides on every tick
 interface SlideProps {
     scene: Scene;
     isActive: boolean;
-    progress: number; // 0 to 1
+    progress: number;
     zIndex: number;
 }
 
@@ -29,36 +28,31 @@ const Slide = React.memo(({ scene, isActive, progress, zIndex }: SlideProps) => 
     const videoRef = useRef<HTMLVideoElement>(null);
     const words = useMemo(() => scene.text.split(" "), [scene.text]);
 
-    // Manage video playback based on active state
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
         if (isActive) {
-            // Slight delay to allow transition to start before resetting logic if needed, 
-            // but for instant response we play immediately.
-            // We check if it's paused to avoid interrupting if it's already playing (though isActive usually changes once)
-            video.currentTime = 0; // Always restart video when scene becomes active
+            video.currentTime = 0;
             video.play().catch(e => console.warn("Autoplay prevented", e));
         } else {
-            // Pause immediately when not active to save resources
             video.pause();
         }
     }, [isActive]);
 
     return (
-        <div 
+        <div
             className={`
                 absolute inset-0 w-full h-full transition-all duration-1000 ease-in-out
-                ${isActive 
-                    ? 'opacity-100 scale-100 blur-0' 
-                    : 'opacity-0 scale-110 blur-sm pointer-events-none'
+                ${isActive
+                    ? 'opacity-100 scale-100 blur-0'
+                    : 'opacity-0 scale-105 blur-sm pointer-events-none'
                 }
             `}
             style={{ zIndex }}
         >
             {/* Visual Content */}
-            <div className="absolute inset-0 w-full h-full bg-slate-900 overflow-hidden">
+            <div className="absolute inset-0 w-full h-full overflow-hidden" style={{ background: '#0e0c0b' }}>
                 {scene.videoUri ? (
                     <video
                         ref={videoRef}
@@ -69,40 +63,48 @@ const Slide = React.memo(({ scene, isActive, progress, zIndex }: SlideProps) => 
                         playsInline
                     />
                 ) : scene.imageData ? (
-                    <img 
-                        src={`data:image/png;base64,${scene.imageData}`} 
+                    <img
+                        src={`data:image/png;base64,${scene.imageData}`}
                         className={`w-full h-full object-cover origin-center ${isActive ? 'animate-kenburns' : ''}`}
                         alt={scene.visualPrompt}
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                        <span className="text-slate-500">No Visuals</span>
+                    <div className="w-full h-full flex items-center justify-center" style={{ background: '#1c1917' }}>
+                        <span style={{ color: '#57534e' }}>No Visuals</span>
                     </div>
                 )}
             </div>
-            
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent pointer-events-none" />
-            
+
+            {/* Cinematic Vignette */}
+            <div className="absolute inset-0 cinematic-vignette pointer-events-none" />
+
+            {/* Bottom Gradient */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+                background: 'linear-gradient(to top, rgba(14,12,11,0.95) 0%, rgba(14,12,11,0.6) 25%, transparent 55%)'
+            }} />
+
             {/* Text Content */}
-            <div className="absolute bottom-0 left-0 right-0 p-8 pb-16 flex flex-col items-center justify-end min-h-[50%]">
-                <div className="bg-black/50 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-2xl w-full">
-                    <p className="text-white text-xl md:text-2xl font-bold drop-shadow-lg leading-relaxed text-center flex flex-wrap justify-center gap-1.5">
+            <div className="absolute bottom-0 left-0 right-0 p-8 pb-20 flex flex-col items-center justify-end min-h-[45%]">
+                <div className="w-full max-w-2xl px-6 py-5 rounded-2xl" style={{
+                    background: 'rgba(14, 12, 11, 0.5)',
+                    backdropFilter: 'blur(20px) saturate(1.3)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                }}>
+                    <p className="text-xl md:text-2xl font-display drop-shadow-lg leading-relaxed text-center flex flex-wrap justify-center gap-x-2 gap-y-1" style={{ color: '#fafaf9' }}>
                         {words.map((word, i) => {
-                            // Text reveals over the first 80% of the slide duration
                             const revealThreshold = (i / words.length) * 0.8;
                             const isVisible = progress > revealThreshold;
-                            
+
                             return (
-                                <span 
-                                    key={i} 
-                                    className={`
-                                        inline-block transition-all duration-500 transform
-                                        ${isVisible 
-                                            ? 'opacity-100 translate-y-0 scale-100 blur-0' 
-                                            : 'opacity-0 translate-y-2 scale-90 blur-[2px]'
-                                        }
-                                    `}
+                                <span
+                                    key={i}
+                                    className="inline-block transition-all duration-500 transform"
+                                    style={isVisible
+                                        ? { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0)' }
+                                        : { opacity: 0, transform: 'translateY(6px) scale(0.95)', filter: 'blur(3px)' }
+                                    }
                                 >
                                     {word}
                                 </span>
@@ -121,13 +123,10 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
   const [currentSceneIndex, setCurrentSceneIndex] = useState(startIndex);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
-  
+
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const sceneDurationRef = useRef<number>(0);
-
-  // Preload logic can stay, but React rendering all images handles it implicitly.
-  // We keep explicit preloading for smoother first run if needed, but omitted for brevity as browser handles it via DOM.
 
   useEffect(() => {
     if (isPlaying) {
@@ -135,12 +134,10 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
       if (!scene) return;
 
       sceneDurationRef.current = scene.duration * 1000;
-      
-      // If we just started/resumed, calculate start time based on current progress
+
       if (startTimeRef.current === 0 || progress === 0) {
           startTimeRef.current = Date.now() - (progress * sceneDurationRef.current);
       } else {
-          // Resuming from pause
           startTimeRef.current = Date.now() - (progress * sceneDurationRef.current);
       }
 
@@ -151,18 +148,13 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
 
         if (newProgress >= 1) {
           if (currentSceneIndex < scenes.length - 1) {
-            // Next scene
-            // Reset progress first to ensure next slide starts cleanly
             setProgress(0);
             setCurrentSceneIndex(prev => prev + 1);
             startTimeRef.current = Date.now();
-            // sceneDuration will be updated on next effect run or we can look ahead
-            // To prevent a frame gap, we can look ahead:
             const nextScene = scenes[currentSceneIndex + 1];
             sceneDurationRef.current = nextScene.duration * 1000;
             timerRef.current = requestAnimationFrame(tick);
           } else {
-            // End of story
             setIsPlaying(false);
             setProgress(1);
           }
@@ -179,7 +171,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
     return () => {
       if (timerRef.current) cancelAnimationFrame(timerRef.current);
     };
-  }, [isPlaying, currentSceneIndex, scenes]); // Removed progress from dependency to avoid loop resets
+  }, [isPlaying, currentSceneIndex, scenes]);
 
   const togglePlay = () => {
     if (currentSceneIndex === scenes.length - 1 && progress === 1) {
@@ -200,22 +192,29 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
   const frameHeightClass = aspectRatio === "9:16" ? "h-[90vh]" : "w-[90vw] max-w-[1200px]";
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/95 flex items-center justify-center backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-40 flex items-center justify-center animate-fade-in" style={{
+        background: 'rgba(0, 0, 0, 0.95)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+    }}>
       {/* Frame Container */}
-      <div className={`relative ${frameHeightClass} ${frameAspectClass} bg-slate-900 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(250,204,21,0.2)] border-4 border-slate-800 ring-1 ring-white/10`}>
-        
+      <div
+        className={`relative ${frameHeightClass} ${frameAspectClass} rounded-2xl overflow-hidden`}
+        style={{
+            background: '#0e0c0b',
+            border: '2px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 0 60px rgba(251,191,36,0.1), 0 0 120px rgba(0,0,0,0.5)',
+        }}
+      >
+
         {/* Scenes Stack */}
         <div className="absolute inset-0 w-full h-full">
             {scenes.map((scene, index) => {
-                // Calculate scene-specific progress
-                // If it's current, use global progress.
-                // If it's past, it should be 1 (fully revealed).
-                // If it's future, it should be 0.
                 const slideProgress = index === currentSceneIndex ? progress : (index < currentSceneIndex ? 1 : 0);
                 const isActive = index === currentSceneIndex;
-                
+
                 return (
-                    <Slide 
+                    <Slide
                         key={scene.id}
                         scene={scene}
                         isActive={isActive}
@@ -227,38 +226,94 @@ export const Player: React.FC<PlayerProps> = ({ scenes, onClose, startIndex = 0,
         </div>
 
         {/* Progress Bar Top */}
-        <div className="absolute top-0 left-0 right-0 flex gap-1 p-2 z-50 bg-gradient-to-b from-black/80 to-transparent pt-4">
+        <div className="absolute top-0 left-0 right-0 flex gap-1 px-3 pt-3 z-50" style={{
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
+            paddingBottom: '24px',
+        }}>
             {scenes.map((s, idx) => (
-                <div key={s.id} className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-                    <div 
-                        className="h-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-all duration-100 ease-linear"
-                        style={{ 
-                            width: idx < currentSceneIndex ? '100%' : 
-                                   idx === currentSceneIndex ? `${progress * 100}%` : '0%' 
+                <div
+                    key={s.id}
+                    className="h-[3px] flex-1 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.15)' }}
+                >
+                    <div
+                        className="h-full rounded-full transition-all duration-100 ease-linear"
+                        style={{
+                            width: idx < currentSceneIndex ? '100%' :
+                                   idx === currentSceneIndex ? `${progress * 100}%` : '0%',
+                            background: 'linear-gradient(90deg, #fbbf24, #d97706)',
+                            boxShadow: idx === currentSceneIndex ? '0 0 8px rgba(251,191,36,0.5)' : 'none',
                         }}
                     />
                 </div>
             ))}
         </div>
 
-        {/* Controls Overlay (Hover) */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity duration-300 group cursor-pointer z-50" onClick={togglePlay}>
-             <button 
-                className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:scale-110 transition-transform duration-200 text-white shadow-lg border border-white/20"
+        {/* Scene Counter */}
+        <div className="absolute top-6 left-3 z-50 px-2.5 py-1 rounded-lg" style={{
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+            <span className="text-[10px] font-mono font-semibold" style={{ color: '#a8a29e' }}>
+                {currentSceneIndex + 1} <span style={{ color: '#57534e' }}>/</span> {scenes.length}
+            </span>
+        </div>
+
+        {/* Play/Pause Overlay */}
+        <div
+            className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300 cursor-pointer z-50"
+            onClick={togglePlay}
+            style={{ background: 'rgba(0,0,0,0.15)' }}
+        >
+             <button
+                className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+                style={{
+                    background: 'rgba(255,255,255,0.12)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#fafaf9',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+                }}
              >
-                {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+                {isPlaying
+                    ? <Pause size={24} fill="currentColor" />
+                    : <Play size={24} fill="currentColor" className="ml-0.5" />
+                }
              </button>
         </div>
 
       </div>
 
       {/* Global Controls */}
-      <div className="absolute bottom-6 flex gap-4 z-50">
-        <button onClick={onClose} className="px-6 py-3 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition border border-slate-700 shadow-lg">
+      <div className="absolute bottom-8 flex gap-3 z-50">
+        <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 text-sm"
+            style={{
+                background: 'rgba(41, 37, 36, 0.8)',
+                backdropFilter: 'blur(8px)',
+                color: '#d6d3d1',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            }}
+        >
+            <X size={16} />
             Close
         </button>
-        <button onClick={restart} className="px-6 py-3 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition flex items-center gap-2 border border-slate-700 shadow-lg">
-            <RotateCcw size={18} /> Restart
+        <button
+            onClick={restart}
+            className="px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 text-sm"
+            style={{
+                background: 'rgba(41, 37, 36, 0.8)',
+                backdropFilter: 'blur(8px)',
+                color: '#d6d3d1',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            }}
+        >
+            <RotateCcw size={16} /> Restart
         </button>
       </div>
     </div>

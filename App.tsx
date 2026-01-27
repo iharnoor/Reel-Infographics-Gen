@@ -3,7 +3,7 @@ import { ApiKeyModal } from './components/ApiKeyModal';
 import { Player } from './components/Player';
 import { analyzeScript, generateSceneImage, generateSceneVideo } from './services/geminiService';
 import { Scene, Storyboard } from './types';
-import { Clapperboard, Sparkles, AlertCircle, Loader2, PlayCircle, Image as ImageIcon, StopCircle, Download, Film, Video, Wand2 } from 'lucide-react';
+import { Clapperboard, Sparkles, AlertCircle, Loader2, PlayCircle, Image as ImageIcon, Download, Film, Video, Wand2, ChevronRight } from 'lucide-react';
 import JSZip from 'jszip';
 
 const App: React.FC = () => {
@@ -56,7 +56,6 @@ const App: React.FC = () => {
     try {
       const data = await analyzeScript(script, 60, aspectRatio, isDramatic);
       setStoryboard(data);
-      // Start parallel generation
       generateImages(data.scenes);
     } catch (err: any) {
       handleApiError(err);
@@ -69,16 +68,15 @@ const App: React.FC = () => {
     setError(null);
     setProgressMessage("Starting parallel generation...");
 
-    const CONCURRENCY_LIMIT = 3; 
+    const CONCURRENCY_LIMIT = 3;
 
     const processScene = async (scene: Scene) => {
       const sceneId = scene.id;
       let retries = 0;
-      const MAX_RETRIES = 5; 
+      const MAX_RETRIES = 5;
       let success = false;
 
       while (!success && retries < MAX_RETRIES) {
-        // Update status to generating
         setStoryboard(prev => {
           if (!prev) return null;
           return {
@@ -107,8 +105,7 @@ const App: React.FC = () => {
                 ...prev,
                 scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, status: 'error' } : s)
             } : null);
-            // Critical error, stop retrying this scene
-            throw e; 
+            throw e;
           }
 
           if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) {
@@ -118,16 +115,15 @@ const App: React.FC = () => {
                   ...prev,
                   scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, status: 'error' } : s)
               } : null);
-              break; 
+              break;
             }
 
-            let waitMs = 5000 * Math.pow(2, retries); // Exponential backoff
-            // Try to parse retry delay from message
+            let waitMs = 5000 * Math.pow(2, retries);
             const match = msg.match(/retry in (\d+(\.\d+)?)s/);
             if (match && match[1]) {
                 waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000;
             }
-            
+
             console.log(`Rate limit hit for scene ${sceneId}. Retrying in ${waitMs}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitMs));
           } else {
@@ -141,7 +137,6 @@ const App: React.FC = () => {
       }
     };
 
-    // Parallel execution queue
     const executing: Promise<void>[] = [];
     let hasCriticalError = false;
 
@@ -156,8 +151,7 @@ const App: React.FC = () => {
                 handleApiError(e);
             }
         });
-        
-        // Wrap promise to manage the executing array
+
         const pWrapper: Promise<void> = p.then(() => {
              executing.splice(executing.indexOf(pWrapper), 1);
         });
@@ -170,14 +164,14 @@ const App: React.FC = () => {
     }
 
     await Promise.all(executing);
-    
+
     if (!hasCriticalError) {
         setIsProcessing(false);
         setProgressMessage("Done!");
     }
   };
 
-  // 3. Generate Video for a specific scene (Single or internal use)
+  // 3. Generate Video for a specific scene
   const generateVideoForScene = async (sceneId: number) => {
     const scene = storyboard?.scenes.find(s => s.id === sceneId);
     if (!scene || !scene.imageData) return;
@@ -195,7 +189,6 @@ const App: React.FC = () => {
         try {
             const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt, aspectRatio, isDramatic);
 
-            // Immediately fetch and cache the video blob to avoid URL expiration
             let videoBlob: Blob | undefined;
             try {
                 const response = await fetch(videoUri);
@@ -216,7 +209,6 @@ const App: React.FC = () => {
             const msg = err.message || JSON.stringify(err);
             console.error(`Video gen error scene ${sceneId} attempt ${retries + 1}`, msg);
 
-            // Retry on generic errors if not a strict failure
             retries++;
             if (retries >= MAX_RETRIES) {
                     setStoryboard(prev => prev ? {
@@ -225,19 +217,17 @@ const App: React.FC = () => {
                 } : null);
                 break;
             }
-            
-            // Short backoff
+
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
   };
 
-  // Wrapper for button click
   const handleGenerateVideo = (sceneId: number) => {
       generateVideoForScene(sceneId);
   };
 
-  // Parallel Video Generation (Restored Parallelism for Fal.ai)
+  // Parallel Video Generation
   const handleAnimateAll = async () => {
       if (!storyboard) return;
       const scenesToAnimate = storyboard.scenes.filter(s => s.status === 'completed' && !s.videoUri && s.videoStatus !== 'generating');
@@ -246,12 +236,12 @@ const App: React.FC = () => {
       setIsProcessing(true);
       setProgressMessage("Animating scenes with Veo 3.1 Fast...");
 
-      const CONCURRENCY_LIMIT = 3; // Fal.ai queue handles this well, but let's be polite
+      const CONCURRENCY_LIMIT = 3;
       const executing: Promise<void>[] = [];
 
       for (const scene of scenesToAnimate) {
         const p = generateVideoForScene(scene.id);
-        
+
         const pWrapper: Promise<void> = p.then(() => {
              executing.splice(executing.indexOf(pWrapper), 1);
         });
@@ -276,21 +266,17 @@ const App: React.FC = () => {
     try {
       const zip = new JSZip();
       const folder = zip.folder("nano_banana_assets");
-      
+
       let count = 0;
       storyboard.scenes.forEach((scene, index) => {
         if (scene.imageData) {
           folder?.file(`scene_${index + 1}.png`, scene.imageData, { base64: true });
           count++;
         }
-        // Include videos if they exist
-        // Note: Videos are URLs, we can't easily fetch and blob them all without potential CORS or bandwidth issues in a loop here,
-        // but let's at least create a text file with links or try to fetch if possible.
-        // For simplicity and stability, we'll stick to images for the bulk zip or need to fetch blobs one by one.
       });
 
       if (count === 0) throw new Error("No images generated yet.");
-      
+
       const content = await zip.generateAsync({ type: "blob" });
       const url = window.URL.createObjectURL(content);
       const a = document.createElement("a");
@@ -301,7 +287,7 @@ const App: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
     } catch (e: any) {
       console.error("Download failed", e);
       setError(`Download failed: ${e.message}`);
@@ -323,7 +309,6 @@ const App: React.FC = () => {
   const handleDownloadVideo = async (scene: Scene) => {
     if (!scene.videoUri) return;
     try {
-        // Fal.ai URLs are usually public for a short time, fetch directly
         const response = await fetch(scene.videoUri);
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -336,7 +321,6 @@ const App: React.FC = () => {
         document.body.removeChild(a);
     } catch (e) {
         console.error("Failed to download video blob", e);
-        // Fallback to direct link opening
         window.open(scene.videoUri, '_blank');
     }
   };
@@ -344,7 +328,6 @@ const App: React.FC = () => {
   const handleExportFullVideo = async () => {
     if (!storyboard) return;
 
-    // Validate all scenes have videos
     const scenesWithVideos = storyboard.scenes.filter(s => s.videoUri);
     if (scenesWithVideos.length !== storyboard.scenes.length) {
       setError(`${storyboard.scenes.length - scenesWithVideos.length} scenes still need videos. Click "Animate All" first.`);
@@ -355,7 +338,6 @@ const App: React.FC = () => {
       setVideoExportState({ isExporting: true, progress: 0, message: 'Preparing export...' });
       setError(null);
 
-      // Phase 1: Get all videos (use cached blobs or download if needed) (0-50%)
       const videoBlobs: Blob[] = [];
       for (let i = 0; i < storyboard.scenes.length; i++) {
         const scene = storyboard.scenes[i];
@@ -365,7 +347,6 @@ const App: React.FC = () => {
           message: `Preparing video ${i + 1}/${storyboard.scenes.length}...`
         }));
 
-        // Use cached blob if available, otherwise fetch from URL
         if (scene.videoBlob) {
           console.log(`Using cached blob for scene ${i + 1}`);
           videoBlobs.push(scene.videoBlob);
@@ -382,7 +363,6 @@ const App: React.FC = () => {
         }
       }
 
-      // Phase 2: Load FFmpeg (50-55%)
       setVideoExportState(prev => ({
         ...prev,
         progress: 50,
@@ -397,7 +377,6 @@ const App: React.FC = () => {
         }));
       });
 
-      // Phase 3: Stitch videos (55-95%)
       const { stitchVideos } = await import('./services/ffmpegService');
       const finalBlob = await stitchVideos(videoBlobs, (msg, percent) => {
         setVideoExportState(prev => ({
@@ -407,7 +386,6 @@ const App: React.FC = () => {
         }));
       });
 
-      // Phase 4: Download (95-100%)
       setVideoExportState(prev => ({
         ...prev,
         progress: 95,
@@ -430,7 +408,6 @@ const App: React.FC = () => {
         message: 'Complete!'
       });
 
-      // Clear success message after 3 seconds
       setTimeout(() => {
         setVideoExportState({ isExporting: false, progress: 0, message: '' });
       }, 3000);
@@ -469,55 +446,51 @@ const App: React.FC = () => {
   const hasErrors = storyboard?.scenes.some(s => s.status === 'error');
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-hidden bg-slate-950">
-      <ApiKeyModal 
-        onKeySelected={handleKeySelected} 
-        forceNewKey={forceKeySelection} 
+    <div className="flex-1 flex flex-col relative overflow-hidden bg-mesh">
+      <ApiKeyModal
+        onKeySelected={handleKeySelected}
+        forceNewKey={forceKeySelection}
       />
 
-      {/* Header */}
-      <header className="px-6 py-4 flex items-center justify-between border-b border-slate-800 bg-slate-900/80 backdrop-blur-md z-10 sticky top-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20 rotate-3 transition-transform hover:rotate-6">
-            <span className="text-2xl">🍌</span>
+      {/* ===== Header ===== */}
+      <header className="px-6 py-3.5 flex items-center justify-between border-b z-10 sticky top-0 glass" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center animate-float" style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)' }}>
+            <span className="text-xl">🍌</span>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white leading-none">Nano Banana <span className="text-yellow-400">Pro</span></h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-semibold">Infographic Story Engine</p>
+            <h1 className="text-lg font-display tracking-tight leading-none" style={{ color: '#fafaf9' }}>
+              Nano Banana <span className="text-gradient-amber font-display italic">Pro</span>
+            </h1>
+            <p className="text-[9px] uppercase tracking-[0.2em] mt-0.5 font-medium" style={{ color: '#78716c' }}>Infographic Story Engine</p>
           </div>
         </div>
 
-        {/* Toggles */}
-        <div className="flex items-center gap-3">
+        {/* Controls */}
+        <div className="flex items-center gap-2.5">
           {/* Aspect Ratio Toggle */}
-          <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl p-1 border border-slate-700">
+          <div className="flex items-center rounded-xl p-1" style={{ background: 'rgba(41, 37, 36, 0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <button
               onClick={() => setAspectRatio("9:16")}
               disabled={isProcessing}
-              className={`
-                px-4 py-2 rounded-lg text-xs font-bold transition-all
-                ${aspectRatio === "9:16"
-                  ? 'bg-yellow-500 text-slate-900 shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200'
-                }
-                ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
-              `}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={aspectRatio === "9:16"
+                ? { background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0c0a09', boxShadow: '0 2px 12px rgba(251,191,36,0.3)' }
+                : { color: '#a8a29e' }
+              }
             >
-              9:16 Vertical
+              9:16
             </button>
             <button
               onClick={() => setAspectRatio("16:9")}
               disabled={isProcessing}
-              className={`
-                px-4 py-2 rounded-lg text-xs font-bold transition-all
-                ${aspectRatio === "16:9"
-                  ? 'bg-yellow-500 text-slate-900 shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200'
-                }
-                ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
-              `}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={aspectRatio === "16:9"
+                ? { background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0c0a09', boxShadow: '0 2px 12px rgba(251,191,36,0.3)' }
+                : { color: '#a8a29e' }
+              }
             >
-              16:9 Horizontal
+              16:9
             </button>
           </div>
 
@@ -525,41 +498,46 @@ const App: React.FC = () => {
           <button
             onClick={() => setIsDramatic(!isDramatic)}
             disabled={isProcessing}
-            className={`
-              px-4 py-2 rounded-lg text-xs font-bold transition-all border
-              ${isDramatic
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg border-purple-500'
-                : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 border-slate-700'
-              }
-              ${isProcessing ? 'cursor-not-allowed opacity-50' : ''}
-            `}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={isDramatic
+              ? { background: 'linear-gradient(135deg, #b45309, #92400e)', color: '#fef3c7', border: '1px solid rgba(180,83,9,0.5)', boxShadow: '0 2px 16px rgba(180,83,9,0.3)' }
+              : { background: 'rgba(41, 37, 36, 0.6)', color: '#a8a29e', border: '1px solid rgba(255,255,255,0.06)' }
+            }
           >
-            {isDramatic ? '✨ Dramatic' : 'Dramatic'}
+            {isDramatic ? '◆ Cinematic' : 'Cinematic'}
           </button>
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* ===== Main Content ===== */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        
+
         {/* Left Panel: Input */}
-        <div className="w-full md:w-1/3 min-w-[320px] border-r border-slate-800 p-6 flex flex-col bg-slate-900/30 overflow-y-auto custom-scrollbar">
-          <label className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2 uppercase tracking-wide">
-            <Clapperboard size={16} className="text-yellow-500" /> Video Script
+        <div className="w-full md:w-[360px] md:min-w-[360px] p-6 flex flex-col sidebar-gradient overflow-y-auto" style={{ borderRight: '1px solid rgba(255,255,255,0.04)' }}>
+          <label className="text-xs font-semibold mb-3 flex items-center gap-2 uppercase tracking-[0.15em]" style={{ color: '#78716c' }}>
+            <Clapperboard size={14} style={{ color: '#d97706' }} /> Script
           </label>
           <textarea
-            className="flex-1 min-h-[200px] bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 resize-none mb-4 font-mono text-sm leading-relaxed transition-all shadow-inner"
-            placeholder="Paste your script here... (e.g. 'The future of AI is changing rapidly. First, we saw huge LLMs dominating the landscape. Now, efficiency is king...')"
+            className="flex-1 min-h-[200px] rounded-xl p-4 placeholder-stone-700 focus:outline-none resize-none mb-5 text-sm leading-relaxed transition-all"
+            style={{
+              background: 'rgba(28, 25, 23, 0.8)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              color: '#d6d3d1',
+              fontFamily: "'DM Sans', system-ui, sans-serif",
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(251,191,36,0.3)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(251,191,36,0.08)'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.boxShadow = 'none'; }}
+            placeholder="Paste your script here..."
             value={script}
             onChange={(e) => setScript(e.target.value)}
             disabled={isProcessing && progressMessage.includes("Analyzing")}
           />
-          
+
           {error && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 text-red-200 text-sm animate-fade-in">
-              <AlertCircle size={20} className="mt-0.5 text-red-400 shrink-0" />
+            <div className="mb-4 p-4 rounded-xl flex items-start gap-3 text-sm animate-fade-in" style={{ background: 'rgba(153, 27, 27, 0.12)', border: '1px solid rgba(220, 38, 38, 0.2)', color: '#fca5a5' }}>
+              <AlertCircle size={18} className="mt-0.5 shrink-0" style={{ color: '#ef4444' }} />
               <div className="flex-1">
-                <span className="font-bold block mb-1">Error encountered</span>
+                <span className="font-semibold block mb-1" style={{ color: '#fecaca' }}>Error</span>
                 {error}
               </div>
             </div>
@@ -568,64 +546,77 @@ const App: React.FC = () => {
           <button
             onClick={handleGenerateStoryboard}
             disabled={!apiKeyReady || !script.trim() || isProcessing}
-            className={`
-              w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg
-              ${isProcessing 
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
-                : 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-slate-900 hover:shadow-[0_0_25px_rgba(250,204,21,0.3)] hover:scale-[1.01] active:scale-[0.98]'
-              }
-            `}
+            className="w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all btn-glow"
+            style={isProcessing
+              ? { background: 'rgba(41, 37, 36, 0.6)', color: '#57534e', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.04)' }
+              : { background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0c0a09', boxShadow: '0 4px 20px rgba(251,191,36,0.25)' }
+            }
           >
             {isProcessing ? (
               <>
-                <Loader2 size={20} className="animate-spin" />
+                <Loader2 size={18} className="animate-spin" />
                 Processing...
               </>
             ) : (
               <>
-                <Sparkles size={20} />
+                <Sparkles size={18} />
                 Generate Visuals
               </>
             )}
           </button>
-          
+
           {isProcessing && (
-            <div className="mt-4 flex flex-col items-center">
-                <p className="text-xs font-mono text-yellow-500/80 animate-pulse mb-2">{progressMessage}</p>
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-yellow-500/50 w-full animate-[shimmer_2s_infinite_linear] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.5),transparent)] bg-[length:200%_100%]"></div>
+            <div className="mt-4 flex flex-col items-center animate-fade-in">
+                <p className="text-xs font-mono mb-2.5" style={{ color: 'rgba(251,191,36,0.7)' }}>{progressMessage}</p>
+                <div className="w-full h-0.5 rounded-full overflow-hidden" style={{ background: 'rgba(41, 37, 36, 0.8)' }}>
+                    <div className="h-full w-full animate-shimmer"></div>
                 </div>
             </div>
           )}
+
+          {/* Subtle decorative element */}
+          <div className="mt-auto pt-8 flex items-center gap-2 opacity-30">
+            <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, transparent, rgba(251,191,36,0.3), transparent)' }}></div>
+          </div>
         </div>
 
-        {/* Right Panel: Storyboard Visualization */}
-        <div className="flex-1 bg-slate-950 p-6 overflow-y-auto custom-scrollbar">
+        {/* Right Panel: Storyboard */}
+        <div className="flex-1 p-6 overflow-y-auto" style={{ background: '#0e0c0b' }}>
           {!storyboard ? (
-             <div className="h-full flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800/50 rounded-2xl bg-slate-900/20">
-                <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                    <ImageIcon size={32} className="opacity-40" />
+             <div className="h-full flex flex-col items-center justify-center rounded-2xl" style={{ border: '1px dashed rgba(255,255,255,0.06)', background: 'rgba(28, 25, 23, 0.3)' }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: 'rgba(41, 37, 36, 0.5)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    <ImageIcon size={28} style={{ color: '#44403c' }} />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-400 mb-2">No Visuals Yet</h3>
-                <p className="max-w-xs text-center text-sm">Enter a script on the left to generate your Nano Banana Pro infographic story.</p>
+                <h3 className="text-base font-display mb-2" style={{ color: '#57534e' }}>No Visuals Yet</h3>
+                <p className="max-w-[260px] text-center text-sm leading-relaxed" style={{ color: '#44403c' }}>Enter a script to generate your infographic story.</p>
              </div>
           ) : (
             <div className="max-w-7xl mx-auto pb-20">
-              <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-8 gap-4 bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
+              {/* Storyboard Header */}
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-8 gap-4 p-6 rounded-2xl glass-card">
                 <div>
-                   <h2 className="text-2xl font-bold text-white mb-1 tracking-tight">{storyboard.title}</h2>
+                   <h2 className="text-2xl font-display tracking-tight mb-1.5" style={{ color: '#fafaf9' }}>{storyboard.title}</h2>
                    <div className="flex items-center gap-3 text-sm">
-                       <span className="bg-slate-800 text-slate-300 px-2 py-1 rounded-md font-mono">{totalCount} Scenes</span>
-                       <span className="text-slate-500">•</span>
-                       <span className="text-slate-400">~{Math.round(storyboard.scenes.reduce((acc, s)=> acc + s.duration, 0))}s Duration</span>
+                       <span className="px-2.5 py-1 rounded-md text-xs font-mono" style={{ background: 'rgba(41, 37, 36, 0.8)', color: '#a8a29e', border: '1px solid rgba(255,255,255,0.04)' }}>
+                         {totalCount} scenes
+                       </span>
+                       <span style={{ color: '#44403c' }}>·</span>
+                       <span className="text-xs" style={{ color: '#78716c' }}>~{Math.round(storyboard.scenes.reduce((acc, s) => acc + s.duration, 0))}s</span>
+                       {completedImagesCount > 0 && (
+                         <>
+                           <span style={{ color: '#44403c' }}>·</span>
+                           <span className="text-xs font-mono" style={{ color: '#d97706' }}>{completedImagesCount}/{totalCount} rendered</span>
+                         </>
+                       )}
                    </div>
                 </div>
-                
-                <div className="flex flex-wrap gap-3 relative">
+
+                <div className="flex flex-wrap gap-2.5 relative">
                     {hasErrors && !isProcessing && (
                          <button
                             onClick={() => generateImages(storyboard.scenes.filter(s => s.status === 'error' || !s.imageData))}
-                            className="px-4 py-2.5 rounded-full font-bold flex items-center gap-2 bg-slate-800 text-red-400 hover:bg-slate-700 transition-colors border border-red-500/20 text-sm"
+                            className="px-4 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all text-xs"
+                            style={{ background: 'rgba(153, 27, 27, 0.15)', color: '#fca5a5', border: '1px solid rgba(220, 38, 38, 0.2)' }}
                          >
                             Retry Errors
                          </button>
@@ -635,15 +626,13 @@ const App: React.FC = () => {
                          <button
                             onClick={handleAnimateAll}
                             disabled={isProcessing}
-                            className={`
-                                px-4 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all border text-sm
-                                ${isProcessing
-                                    ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-500 border-blue-500 shadow-lg'
-                                }
-                            `}
+                            className="px-4 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all text-xs btn-glow"
+                            style={isProcessing
+                                ? { background: 'rgba(41, 37, 36, 0.6)', color: '#57534e', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.04)' }
+                                : { background: 'linear-gradient(135deg, #1d4ed8, #2563eb)', color: '#fff', border: '1px solid rgba(59,130,246,0.3)', boxShadow: '0 2px 16px rgba(37,99,235,0.25)' }
+                            }
                          >
-                           {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                           {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                            Animate All
                          </button>
                     )}
@@ -651,19 +640,16 @@ const App: React.FC = () => {
                     <button
                         onClick={handleDownloadAll}
                         disabled={!isAllDone || isDownloading}
-                        className={`
-                            px-4 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all border text-sm
-                            ${isAllDone
-                                ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-slate-500 hover:text-white shadow-lg'
-                                : 'bg-slate-900 border-slate-800 text-slate-700 cursor-not-allowed opacity-50'
-                            }
-                        `}
+                        className="px-4 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all text-xs"
+                        style={isAllDone
+                            ? { background: 'rgba(41, 37, 36, 0.6)', color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.08)' }
+                            : { background: 'rgba(28, 25, 23, 0.5)', color: '#44403c', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.03)' }
+                        }
                     >
-                        {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                        Images Zip
+                        {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                        Images
                     </button>
 
-                    {/* Export Full Video Button */}
                     <button
                         type="button"
                         onClick={handleExportFullVideo}
@@ -672,23 +658,21 @@ const App: React.FC = () => {
                             videoExportState.isExporting ||
                             isProcessing
                         }
-                        className={`
-                            px-4 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all border text-sm relative
-                            ${completedVideosCount === totalCount && !videoExportState.isExporting
-                                ? 'bg-purple-600 border-purple-500 text-white hover:bg-purple-500 shadow-lg shadow-purple-500/20'
-                                : 'bg-slate-900 border-slate-800 text-slate-700 cursor-not-allowed opacity-50'
-                            }
-                        `}
+                        className="px-4 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all text-xs relative btn-glow"
+                        style={completedVideosCount === totalCount && !videoExportState.isExporting
+                            ? { background: 'linear-gradient(135deg, #b45309, #92400e)', color: '#fef3c7', border: '1px solid rgba(180,83,9,0.4)', boxShadow: '0 2px 16px rgba(180,83,9,0.2)' }
+                            : { background: 'rgba(28, 25, 23, 0.5)', color: '#44403c', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.03)' }
+                        }
                     >
                         {videoExportState.isExporting ? (
                             <>
-                                <Loader2 size={16} className="animate-spin" />
+                                <Loader2 size={14} className="animate-spin" />
                                 {Math.round(videoExportState.progress)}%
                             </>
                         ) : (
                             <>
-                                <Film size={16} />
-                                Export Full Video
+                                <Film size={14} />
+                                Export Video
                             </>
                         )}
                     </button>
@@ -696,105 +680,109 @@ const App: React.FC = () => {
                     <button
                         onClick={() => openPlayer(0)}
                         disabled={!isAllDone}
-                        className={`
-                            px-6 py-2.5 rounded-full font-bold flex items-center gap-2 transition-all text-sm
-                            ${isAllDone
-                                ? 'bg-green-500 text-white hover:bg-green-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95'
-                                : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
-                            }
-                        `}
+                        className="px-5 py-2 rounded-xl font-semibold flex items-center gap-2 transition-all text-xs btn-glow"
+                        style={isAllDone
+                            ? { background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#0c0a09', boxShadow: '0 2px 20px rgba(251,191,36,0.3)' }
+                            : { background: 'rgba(41, 37, 36, 0.4)', color: '#57534e', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.04)' }
+                        }
                     >
-                        <PlayCircle size={18} fill="currentColor" className={isAllDone ? "text-white" : "text-slate-600"} />
-                        {isAllDone ? "Play Story" : `Generating ${completedImagesCount}/${totalCount}`}
+                        <PlayCircle size={16} fill="currentColor" />
+                        {isAllDone ? "Play Story" : `${completedImagesCount}/${totalCount}`}
+                        {isAllDone && <ChevronRight size={14} />}
                     </button>
 
-                    {/* Progress Message for Video Export */}
                     {videoExportState.isExporting && videoExportState.message && (
-                        <p className="text-xs text-purple-400 font-mono animate-pulse absolute -bottom-6 left-0 right-0 text-center">
+                        <p className="text-xs font-mono animate-pulse absolute -bottom-6 left-0 right-0 text-center" style={{ color: '#b45309' }}>
                             {videoExportState.message}
                         </p>
                     )}
                 </div>
               </div>
 
-              {/* Grid of Scenes */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {storyboard.scenes.map((scene) => (
-                  <div key={scene.id} className="relative group perspective">
-                    {/* Card */}
+              {/* Scene Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                {storyboard.scenes.map((scene, index) => (
+                  <div
+                    key={scene.id}
+                    className="relative group scene-card animate-stagger"
+                    style={{ animationDelay: `${index * 60}ms` }}
+                  >
                     <div className={`
-                        ${aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-[16/9]"} rounded-xl overflow-hidden border relative shadow-xl transition-all duration-300
-                        ${scene.status === 'error' ? 'border-red-500/50 bg-red-950/10' : 'border-slate-800 bg-slate-900'}
-                        group-hover:shadow-[0_0_25px_rgba(250,204,21,0.1)] group-hover:border-yellow-500/30
-                    `}>
+                        ${aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-[16/9]"} rounded-xl overflow-hidden relative
+                    `}
+                    style={{
+                      border: scene.status === 'error' ? '1px solid rgba(220, 38, 38, 0.3)' : '1px solid rgba(255,255,255,0.06)',
+                      background: scene.status === 'error' ? 'rgba(153, 27, 27, 0.08)' : 'rgba(28, 25, 23, 0.6)',
+                    }}
+                    >
                       {scene.imageData ? (
                         <div className="w-full h-full relative">
-                            <img 
-                                src={`data:image/png;base64,${scene.imageData}`} 
+                            <img
+                                src={`data:image/png;base64,${scene.imageData}`}
                                 alt={`Scene ${scene.id}`}
-                                className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${scene.videoUri ? 'opacity-80' : ''}`}
+                                className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 ${scene.videoUri ? 'opacity-90' : ''}`}
                             />
-                            
-                            {/* Video Status Indicator */}
+
+                            {/* Video Status Badge */}
                             {scene.videoStatus === 'generating' && (
-                                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-yellow-500/50 flex items-center gap-1">
-                                    <Loader2 size={10} className="text-yellow-400 animate-spin" />
-                                    <span className="text-[9px] text-yellow-100 font-mono">ANIMATING</span>
+                                <div className="absolute top-2.5 right-2.5 px-2 py-1 rounded-lg flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(251,191,36,0.3)' }}>
+                                    <Loader2 size={10} className="animate-spin" style={{ color: '#fbbf24' }} />
+                                    <span className="text-[9px] font-mono font-semibold" style={{ color: '#fde68a' }}>ANIMATING</span>
                                 </div>
                             )}
                              {scene.videoUri && (
-                                <div className="absolute top-2 right-2 bg-blue-600/80 backdrop-blur-md px-2 py-1 rounded-full border border-blue-400/50 flex items-center gap-1">
-                                    <Video size={10} className="text-white" />
-                                    <span className="text-[9px] text-white font-mono">VIDEO READY</span>
+                                <div className="absolute top-2.5 right-2.5 px-2 py-1 rounded-lg flex items-center gap-1.5" style={{ background: 'rgba(29, 78, 216, 0.8)', backdropFilter: 'blur(8px)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                    <Video size={10} style={{ color: '#fff' }} />
+                                    <span className="text-[9px] font-mono font-semibold" style={{ color: '#fff' }}>VIDEO</span>
                                 </div>
                             )}
 
                             {/* Number Badge */}
-                            <div className="absolute top-2 left-2 w-6 h-6 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-[10px] font-bold text-white border border-white/10 z-10">
+                            <div className="absolute top-2.5 left-2.5 w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold z-10" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.08)' }}>
                                 {scene.id + 1}
                             </div>
-                            
-                            {/* Hover Actions Overlay */}
-                            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3 z-20 px-4">
-                                
+
+                            {/* Hover Actions */}
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-2.5 z-20 px-3" style={{ background: 'rgba(14, 12, 11, 0.85)', backdropFilter: 'blur(4px)' }}>
+
                                 {scene.status === 'completed' && (
                                     <>
-                                        {/* Animate / Video Button */}
                                         {!scene.videoUri && scene.videoStatus !== 'generating' && (
-                                            <button 
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); handleGenerateVideo(scene.id); }}
-                                                className="w-full py-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg flex items-center justify-center gap-2 text-white text-xs font-bold hover:scale-105 transition-transform shadow-lg border border-blue-400/30"
+                                                className="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all"
+                                                style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)', color: '#fff', border: '1px solid rgba(59,130,246,0.3)' }}
                                             >
-                                                <Film size={14} /> Animate
+                                                <Film size={13} /> Animate
                                             </button>
                                         )}
 
-                                        {/* Play Button */}
-                                        <button 
+                                        <button
                                             onClick={(e) => { e.stopPropagation(); openPlayer(scene.id); }}
-                                            className="w-full py-2 bg-yellow-500 rounded-lg flex items-center justify-center gap-2 text-slate-900 text-xs font-bold hover:scale-105 transition-transform shadow-lg shadow-yellow-500/20"
+                                            className="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all btn-glow"
+                                            style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#0c0a09' }}
                                         >
-                                            <PlayCircle size={14} fill="currentColor" /> Preview
+                                            <PlayCircle size={13} fill="currentColor" /> Preview
                                         </button>
-                                        
-                                        <div className="flex gap-2 w-full mt-2">
-                                            {/* Download Image */}
-                                            <button 
+
+                                        <div className="flex gap-2 w-full">
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); handleDownloadImage(scene); }}
-                                                className="flex-1 py-2 bg-slate-700 rounded-lg flex items-center justify-center text-white hover:bg-slate-600 transition-all border border-slate-600 text-xs"
+                                                className="flex-1 py-2 rounded-lg flex items-center justify-center transition-all text-xs"
+                                                style={{ background: 'rgba(41, 37, 36, 0.8)', color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.08)' }}
                                                 title="Download Image"
                                             >
-                                                <ImageIcon size={14} />
+                                                <ImageIcon size={13} />
                                             </button>
-                                            
-                                            {/* Download Video (If available) */}
+
                                             {scene.videoUri ? (
-                                                <button 
+                                                <button
                                                     onClick={(e) => { e.stopPropagation(); handleDownloadVideo(scene); }}
-                                                    className="flex-1 py-2 bg-blue-600 rounded-lg flex items-center justify-center text-white hover:bg-blue-500 transition-all border border-blue-500 text-xs"
+                                                    className="flex-1 py-2 rounded-lg flex items-center justify-center transition-all text-xs"
+                                                    style={{ background: 'rgba(29, 78, 216, 0.5)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.2)' }}
                                                     title="Download Video"
                                                 >
-                                                    <Video size={14} />
+                                                    <Video size={13} />
                                                 </button>
                                             ) : (
                                                 <div className="flex-1"></div>
@@ -806,40 +794,40 @@ const App: React.FC = () => {
                         </div>
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center relative overflow-hidden">
-                            {/* Background pattern */}
-                            <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'radial-gradient(circle, #64748b 1px, transparent 1px)', backgroundSize: '16px 16px'}}></div>
-                            
+                            {/* Subtle dot pattern */}
+                            <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'radial-gradient(circle, #a8a29e 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+
                             {scene.status === 'generating' ? (
                                 <>
-                                    <div className="relative">
-                                        <div className="absolute inset-0 bg-yellow-500 rounded-full blur-xl opacity-20 animate-pulse"></div>
-                                        <Loader2 size={32} className="text-yellow-400 animate-spin mb-3 relative z-10" />
+                                    <div className="relative mb-3">
+                                        <div className="absolute inset-0 rounded-full blur-xl animate-pulse" style={{ background: 'rgba(251,191,36,0.15)' }}></div>
+                                        <Loader2 size={28} className="animate-spin relative z-10" style={{ color: '#d97706' }} />
                                     </div>
-                                    <span className="text-xs font-mono text-yellow-500/80 uppercase tracking-wider">Rendering</span>
+                                    <span className="text-[10px] font-mono uppercase tracking-[0.15em]" style={{ color: 'rgba(217,119,6,0.7)' }}>Rendering</span>
                                 </>
                             ) : scene.status === 'error' ? (
                                 <>
-                                    <AlertCircle size={32} className="text-red-500 mb-2" />
-                                    <span className="text-xs text-red-400 font-bold">Failed</span>
+                                    <AlertCircle size={28} className="mb-2" style={{ color: '#dc2626' }} />
+                                    <span className="text-[10px] font-semibold" style={{ color: '#fca5a5' }}>Failed</span>
                                 </>
                             ) : (
                                 <>
-                                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mb-2 text-slate-600 font-bold border border-slate-700">
+                                    <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2 text-xs font-bold" style={{ background: 'rgba(41, 37, 36, 0.5)', color: '#57534e', border: '1px solid rgba(255,255,255,0.04)' }}>
                                         {scene.id + 1}
                                     </div>
-                                    <span className="text-xs text-slate-600 font-medium">Pending</span>
+                                    <span className="text-[10px] font-medium" style={{ color: '#44403c' }}>Queued</span>
                                 </>
                             )}
                         </div>
                       )}
-                      
-                      {/* Overlay Info */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent p-4 translate-y-2 group-hover:translate-y-0 transition-transform duration-300 z-10 pointer-events-none">
-                         <div className="flex justify-between items-center mb-1">
-                             <div className="h-0.5 w-8 bg-yellow-500 rounded-full"></div>
-                             <span className="text-[9px] font-mono text-slate-400">{scene.duration}s</span>
+
+                      {/* Bottom Info */}
+                      <div className="absolute inset-x-0 bottom-0 scene-overlay-gradient p-3.5 translate-y-1 group-hover:translate-y-0 transition-transform duration-300 z-10 pointer-events-none">
+                         <div className="flex justify-between items-center mb-1.5">
+                             <div className="h-px w-6 rounded-full" style={{ background: '#d97706' }}></div>
+                             <span className="text-[9px] font-mono" style={{ color: '#78716c' }}>{scene.duration}s</span>
                          </div>
-                         <p className="text-[11px] text-slate-300 line-clamp-3 leading-relaxed font-medium">{scene.text}</p>
+                         <p className="text-[11px] line-clamp-3 leading-relaxed" style={{ color: '#a8a29e' }}>{scene.text}</p>
                       </div>
                     </div>
                   </div>
@@ -850,7 +838,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Fullscreen Player Overlay */}
+      {/* Fullscreen Player */}
       {isPlayerOpen && storyboard && (
         <Player
             scenes={storyboard.scenes}
