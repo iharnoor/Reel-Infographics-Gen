@@ -9,13 +9,6 @@ interface PlayerProps {
   aspectRatio?: "9:16" | "16:9";
 }
 
-// Helper to authenticated video URLs
-const getAuthenticatedVideoSrc = (uri: string) => {
-    const apiKey = process.env.API_KEY;
-    if (uri.includes('key=')) return uri;
-    return `${uri}&key=${apiKey}`;
-};
-
 // --- Individual Slide Component ---
 interface SlideProps {
     scene: Scene;
@@ -56,7 +49,7 @@ const Slide = React.memo(({ scene, isActive, progress, zIndex }: SlideProps) => 
                 {scene.videoUri ? (
                     <video
                         ref={videoRef}
-                        src={getAuthenticatedVideoSrc(scene.videoUri)}
+                        src={scene.videoUri}
                         className="w-full h-full object-cover"
                         muted
                         loop

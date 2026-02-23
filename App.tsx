@@ -6,6 +6,24 @@ import { Scene, Storyboard } from './types';
 import { Clapperboard, Sparkles, AlertCircle, Loader2, PlayCircle, Image as ImageIcon, Download, Film, Video, Wand2, ChevronRight } from 'lucide-react';
 import JSZip from 'jszip';
 
+const MAX_SCRIPT_LENGTH = 10_000;
+
+const isAllowedVideoUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    const allowedHosts = [
+      'fal.media',
+      'v3.fal.media',
+      'storage.googleapis.com',
+      'fal-cdn.batuhan.co',
+    ];
+    return parsed.protocol === 'https:' &&
+      allowedHosts.some(host => parsed.hostname === host || parsed.hostname.endsWith('.' + host));
+  } catch {
+    return false;
+  }
+};
+
 const App: React.FC = () => {
   const [apiKeyReady, setApiKeyReady] = useState(false);
   const [forceKeySelection, setForceKeySelection] = useState(false);
@@ -32,8 +50,8 @@ const App: React.FC = () => {
 
   // Helper to handle API errors
   const handleApiError = (err: any) => {
-    const msg = err.message || JSON.stringify(err);
-    console.error("API Error encountered:", msg);
+    const msg = err.message || 'An unexpected error occurred.';
+    console.error("API Error encountered");
 
     if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
       setError("Permission Denied: Gemini 3 Pro requires a Paid Project API Key for image generation. Please select a valid key.");
@@ -48,6 +66,10 @@ const App: React.FC = () => {
   // 1. Analyze script
   const handleGenerateStoryboard = async () => {
     if (!script.trim()) return;
+    if (script.length > MAX_SCRIPT_LENGTH) {
+      setError(`Script is too long. Maximum ${MAX_SCRIPT_LENGTH} characters.`);
+      return;
+    }
     setIsProcessing(true);
     setError(null);
     setForceKeySelection(false);
@@ -97,8 +119,8 @@ const App: React.FC = () => {
           });
           success = true;
         } catch (e: any) {
-          const msg = e.message || JSON.stringify(e);
-          console.warn(`Scene ${sceneId} error:`, msg);
+          const msg = e.message || 'Unknown error';
+          console.warn(`Scene ${sceneId} generation failed`);
 
           if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
             setStoryboard(prev => prev ? {
@@ -124,7 +146,7 @@ const App: React.FC = () => {
                 waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000;
             }
 
-            console.log(`Rate limit hit for scene ${sceneId}. Retrying in ${waitMs}ms...`);
+            // Rate limit hit, retrying with backoff
             await new Promise(resolve => setTimeout(resolve, waitMs));
           } else {
             setStoryboard(prev => prev ? {
@@ -191,13 +213,13 @@ const App: React.FC = () => {
 
             let videoBlob: Blob | undefined;
             try {
+                if (!isAllowedVideoUrl(videoUri)) throw new Error('Invalid video URL');
                 const response = await fetch(videoUri);
                 if (response.ok) {
                     videoBlob = await response.blob();
-                    console.log(`Cached video blob for scene ${sceneId}, size: ${videoBlob.size} bytes`);
                 }
             } catch (blobErr) {
-                console.warn(`Failed to cache blob for scene ${sceneId}, will rely on URL`, blobErr);
+                // Will rely on URL if blob caching fails
             }
 
             setStoryboard(prev => prev ? {
@@ -206,8 +228,7 @@ const App: React.FC = () => {
             } : null);
             success = true;
         } catch (err: any) {
-            const msg = err.message || JSON.stringify(err);
-            console.error(`Video gen error scene ${sceneId} attempt ${retries + 1}`, msg);
+            console.error(`Video generation failed for scene ${sceneId}, attempt ${retries + 1}`);
 
             retries++;
             if (retries >= MAX_RETRIES) {
@@ -289,7 +310,7 @@ const App: React.FC = () => {
       document.body.removeChild(a);
 
     } catch (e: any) {
-      console.error("Download failed", e);
+      console.error("Download failed");
       setError(`Download failed: ${e.message}`);
     } finally {
       setIsDownloading(false);
@@ -307,7 +328,7 @@ const App: React.FC = () => {
   };
 
   const handleDownloadVideo = async (scene: Scene) => {
-    if (!scene.videoUri) return;
+    if (!scene.videoUri || !isAllowedVideoUrl(scene.videoUri)) return;
     try {
         const response = await fetch(scene.videoUri);
         const blob = await response.blob();
@@ -320,8 +341,10 @@ const App: React.FC = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
     } catch (e) {
-        console.error("Failed to download video blob", e);
-        window.open(scene.videoUri, '_blank');
+        console.error("Failed to download video");
+        if (scene.videoUri && isAllowedVideoUrl(scene.videoUri)) {
+          window.open(scene.videoUri, '_blank', 'noopener,noreferrer');
+        }
     }
   };
 
@@ -348,10 +371,11 @@ const App: React.FC = () => {
         }));
 
         if (scene.videoBlob) {
-          console.log(`Using cached blob for scene ${i + 1}`);
           videoBlobs.push(scene.videoBlob);
         } else if (scene.videoUri) {
-          console.log(`Fetching video from URL for scene ${i + 1}`);
+          if (!isAllowedVideoUrl(scene.videoUri)) {
+            throw new Error(`Invalid video URL for scene ${i + 1}.`);
+          }
           const response = await fetch(scene.videoUri);
           if (!response.ok) {
             throw new Error(`Failed to download video ${i + 1}. URL may have expired. Try re-animating this scene.`);
@@ -413,7 +437,7 @@ const App: React.FC = () => {
       }, 3000);
 
     } catch (err: any) {
-      console.error('Video export failed:', err);
+      console.error('Video export failed');
 
       let userMessage = 'Video export failed: ';
       if (err.message?.includes('fetch') || err.message?.includes('download')) {
@@ -518,6 +542,7 @@ const App: React.FC = () => {
             <Clapperboard size={14} style={{ color: '#d97706' }} /> Script
           </label>
           <textarea
+            maxLength={MAX_SCRIPT_LENGTH}
             className="flex-1 min-h-[200px] rounded-xl p-4 placeholder-stone-700 focus:outline-none resize-none mb-5 text-sm leading-relaxed transition-all"
             style={{
               background: 'rgba(28, 25, 23, 0.8)',
