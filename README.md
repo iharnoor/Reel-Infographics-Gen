@@ -5,6 +5,11 @@
 
 Transform text scripts into stunning animated infographic videos using AI. This tool leverages Google's Gemini AI to analyze your script, generate visually appealing scenes, and create professional video content optimized for social media platforms.
 
+<div align="center">
+<img src="Example infographic.png" alt="Example generated infographic scene" width="300" />
+<p><em>Example scene generated in minimal 3D mode (9:16)</em></p>
+</div>
+
 ## Features
 
 - **AI-Powered Scene Generation**: Automatically breaks down scripts into visual scenes using Gemini AI
