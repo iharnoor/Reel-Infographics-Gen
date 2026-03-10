@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 const MAX_SCRIPT_LENGTH = 10_000;
 
 const isAllowedVideoUrl = (url: string): boolean => {
+  if (url.startsWith('data:video/')) return true;
   try {
     const parsed = new URL(url);
     const allowedHosts = [

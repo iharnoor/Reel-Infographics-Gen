@@ -19,8 +19,7 @@ app.use('/api/fal', falRouter);
 
 app.get('/api/health', (_req, res) => {
   const hasGemini = !!process.env.GEMINI_API_KEY;
-  const hasFal = !!process.env.FAL_API_KEY;
-  res.json({ status: 'ok', keys: { gemini: hasGemini, fal: hasFal } });
+  res.json({ status: 'ok', keys: { gemini: hasGemini } });
 });
 
 app.listen(PORT, () => {
