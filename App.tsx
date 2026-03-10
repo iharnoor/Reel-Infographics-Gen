@@ -12,14 +12,7 @@ const isAllowedVideoUrl = (url: string): boolean => {
   if (url.startsWith('data:video/')) return true;
   try {
     const parsed = new URL(url);
-    const allowedHosts = [
-      'fal.media',
-      'v3.fal.media',
-      'storage.googleapis.com',
-      'fal-cdn.batuhan.co',
-    ];
-    return parsed.protocol === 'https:' &&
-      allowedHosts.some(host => parsed.hostname === host || parsed.hostname.endsWith('.' + host));
+    return parsed.protocol === 'https:' && parsed.hostname === 'storage.googleapis.com';
   } catch {
     return false;
   }
@@ -39,6 +32,11 @@ const App: React.FC = () => {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [playerStartIndex, setPlayerStartIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [singleScene, setSingleScene] = useState(true);
+  const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
+  const [editingPromptText, setEditingPromptText] = useState('');
+  const [overlayEditId, setOverlayEditId] = useState<number | null>(null);
+  const [overlayEditValue, setOverlayEditValue] = useState('');
   const [videoExportState, setVideoExportState] = useState<{
     isExporting: boolean;
     progress: number;
@@ -77,7 +75,7 @@ const App: React.FC = () => {
     setProgressMessage("Analyzing script and planning scenes...");
 
     try {
-      const data = await analyzeScript(script, 60, aspectRatio, isDramatic);
+      const data = await analyzeScript(script, 60, aspectRatio, isDramatic, singleScene);
       setStoryboard(data);
       generateImages(data.scenes);
     } catch (err: any) {
@@ -210,7 +208,10 @@ const App: React.FC = () => {
 
     while (!success && retries < MAX_RETRIES) {
         try {
-            const videoUri = await generateSceneVideo(scene.imageData, scene.visualPrompt, aspectRatio, isDramatic);
+            const imageForVideo = scene.overlayText
+              ? await composeImageWithText(scene.imageData, scene.overlayText)
+              : scene.imageData;
+            const videoUri = await generateSceneVideo(imageForVideo, scene.visualPrompt, aspectRatio, isDramatic);
 
             let videoBlob: Blob | undefined;
             try {
@@ -248,6 +249,87 @@ const App: React.FC = () => {
   const handleGenerateVideo = (sceneId: number) => {
       generateVideoForScene(sceneId);
   };
+
+  const handleStartEditPrompt = (scene: Scene) => {
+    setEditingPromptId(scene.id);
+    setEditingPromptText(scene.visualPrompt);
+  };
+
+  const handleSavePrompt = (sceneId: number) => {
+    setStoryboard(prev => prev ? {
+      ...prev,
+      scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, visualPrompt: editingPromptText } : s)
+    } : null);
+    setEditingPromptId(null);
+  };
+
+  const handleSaveOverlay = (sceneId: number) => {
+    setStoryboard(prev => prev ? {
+      ...prev,
+      scenes: prev.scenes.map(s => s.id === sceneId ? { ...s, overlayText: overlayEditValue.trim() || undefined } : s)
+    } : null);
+    setOverlayEditId(null);
+  };
+
+  // Composites overlay text onto the image using Canvas, returns new base64
+  const composeImageWithText = (imageData: string, text: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${imageData}`;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas unavailable')); return; }
+        ctx.drawImage(img, 0, 0);
+
+        const fontSize = Math.max(18, Math.round(img.height * 0.05));
+        ctx.font = `bold ${fontSize}px 'DM Sans', sans-serif`;
+        ctx.textAlign = 'center';
+        const maxWidth = img.width * 0.85;
+        const x = img.width / 2;
+
+        // Word wrap
+        const words = text.split(' ');
+        const lines: string[] = [];
+        let line = '';
+        for (const word of words) {
+          const test = line + word + ' ';
+          if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line.trim());
+            line = word + ' ';
+          } else { line = test; }
+        }
+        lines.push(line.trim());
+
+        const lineH = fontSize * 1.35;
+        const blockH = lines.length * lineH + fontSize * 0.8;
+        const blockY = img.height - blockH - fontSize * 0.5;
+
+        // Semi-transparent gradient behind text
+        const grad = ctx.createLinearGradient(0, blockY - fontSize, 0, img.height);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.65)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, blockY - fontSize, img.width, img.height - blockY + fontSize);
+
+        // Draw text
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'top';
+        lines.forEach((l, i) => ctx.fillText(l, x, blockY + i * lineH));
+
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('Canvas blob failed')); return; }
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(blob);
+        }, 'image/png');
+      };
+      img.onerror = () => reject(new Error('Image load failed'));
+    });
 
   // Parallel Video Generation
   const handleAnimateAll = async () => {
@@ -318,35 +400,29 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDownloadImage = (scene: Scene) => {
+  const handleDownloadImage = async (scene: Scene) => {
     if (!scene.imageData) return;
+    const imageData = scene.overlayText
+      ? await composeImageWithText(scene.imageData, scene.overlayText)
+      : scene.imageData;
     const a = document.createElement("a");
-    a.href = `data:image/png;base64,${scene.imageData}`;
+    a.href = `data:image/png;base64,${imageData}`;
     a.download = `scene_${scene.id + 1}_image.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   };
 
-  const handleDownloadVideo = async (scene: Scene) => {
-    if (!scene.videoUri || !isAllowedVideoUrl(scene.videoUri)) return;
-    try {
-        const response = await fetch(scene.videoUri);
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `scene_${scene.id + 1}_video.mp4`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    } catch (e) {
-        console.error("Failed to download video");
-        if (scene.videoUri && isAllowedVideoUrl(scene.videoUri)) {
-          window.open(scene.videoUri, '_blank', 'noopener,noreferrer');
-        }
-    }
+  const handleDownloadVideo = (scene: Scene) => {
+    if (!scene.videoBlob) return;
+    const url = window.URL.createObjectURL(scene.videoBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scene_${scene.id + 1}_video.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   const handleExportFullVideo = async () => {
@@ -569,6 +645,28 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {/* Single / Multi Scene Toggle */}
+          <div className="flex items-center rounded-xl p-1 mb-3" style={{ background: 'rgba(41, 37, 36, 0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <button
+              onClick={() => setSingleScene(true)}
+              disabled={isProcessing}
+              className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={singleScene
+                ? { background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0c0a09', boxShadow: '0 2px 12px rgba(251,191,36,0.3)' }
+                : { color: '#a8a29e' }
+              }
+            >1 Scene</button>
+            <button
+              onClick={() => setSingleScene(false)}
+              disabled={isProcessing}
+              className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={!singleScene
+                ? { background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#0c0a09', boxShadow: '0 2px 12px rgba(251,191,36,0.3)' }
+                : { color: '#a8a29e' }
+              }
+            >Multi Scene</button>
+          </div>
+
           <button
             onClick={handleGenerateStoryboard}
             disabled={!apiKeyReady || !script.trim() || isProcessing}
@@ -768,12 +866,57 @@ const App: React.FC = () => {
                                 {scene.id + 1}
                             </div>
 
+                            {/* Overlay Text Display */}
+                            {scene.overlayText && overlayEditId !== scene.id && (
+                              <div
+                                className="absolute inset-x-0 bottom-14 px-3 z-15 pointer-events-none"
+                                style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.6)' }}
+                              >
+                                <p className="text-white font-bold text-center text-xs leading-snug line-clamp-4">{scene.overlayText}</p>
+                              </div>
+                            )}
+
+                            {/* Overlay Text Edit */}
+                            {overlayEditId === scene.id && (
+                              <div className="absolute inset-0 z-30 flex flex-col p-3 gap-2" style={{ background: 'rgba(14,12,11,0.95)', backdropFilter: 'blur(4px)' }}>
+                                <p className="text-[9px] uppercase tracking-[0.15em] font-semibold" style={{ color: '#78716c' }}>Text Overlay</p>
+                                <textarea
+                                  className="flex-1 rounded-lg p-2 text-xs leading-relaxed resize-none focus:outline-none"
+                                  style={{ background: 'rgba(41,37,36,0.8)', color: '#d6d3d1', border: '1px solid rgba(251,191,36,0.3)' }}
+                                  placeholder="Type text to show on image..."
+                                  value={overlayEditValue}
+                                  onChange={e => setOverlayEditValue(e.target.value)}
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setOverlayEditId(null)}
+                                    className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold"
+                                    style={{ background: 'rgba(41,37,36,0.8)', color: '#a8a29e', border: '1px solid rgba(255,255,255,0.06)' }}
+                                  >Cancel</button>
+                                  <button
+                                    onClick={() => handleSaveOverlay(scene.id)}
+                                    className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold"
+                                    style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#0c0a09' }}
+                                  >Save</button>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Hover Actions */}
                             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-2.5 z-20 px-3" style={{ background: 'rgba(14, 12, 11, 0.85)', backdropFilter: 'blur(4px)' }}>
 
                                 {scene.status === 'completed' && (
                                     <>
                                         {!scene.videoUri && scene.videoStatus !== 'generating' && (
+                                            <>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleStartEditPrompt(scene); }}
+                                                className="w-full py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-semibold transition-all"
+                                                style={{ background: 'rgba(41,37,36,0.8)', color: '#a8a29e', border: '1px solid rgba(255,255,255,0.08)' }}
+                                            >
+                                                ✎ Edit Prompt
+                                            </button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleGenerateVideo(scene.id); }}
                                                 className="w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all"
@@ -781,6 +924,7 @@ const App: React.FC = () => {
                                             >
                                                 <Film size={13} /> Animate
                                             </button>
+                                            </>
                                         )}
 
                                         <button
@@ -792,6 +936,14 @@ const App: React.FC = () => {
                                         </button>
 
                                         <div className="flex gap-2 w-full">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setOverlayEditId(scene.id); setOverlayEditValue(scene.overlayText || ''); }}
+                                                className="flex-1 py-2 rounded-lg flex items-center justify-center transition-all text-xs font-bold"
+                                                style={{ background: scene.overlayText ? 'rgba(251,191,36,0.2)' : 'rgba(41,37,36,0.8)', color: scene.overlayText ? '#fbbf24' : '#a8a29e', border: `1px solid ${scene.overlayText ? 'rgba(251,191,36,0.3)' : 'rgba(255,255,255,0.08)'}` }}
+                                                title="Edit Text Overlay"
+                                            >
+                                                T
+                                            </button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDownloadImage(scene); }}
                                                 className="flex-1 py-2 rounded-lg flex items-center justify-center transition-all text-xs"
@@ -844,6 +996,32 @@ const App: React.FC = () => {
                                     <span className="text-[10px] font-medium" style={{ color: '#44403c' }}>Queued</span>
                                 </>
                             )}
+                        </div>
+                      )}
+
+                      {/* Prompt Edit Overlay */}
+                      {editingPromptId === scene.id && (
+                        <div className="absolute inset-0 z-30 flex flex-col p-3 gap-2" style={{ background: 'rgba(14, 12, 11, 0.95)', backdropFilter: 'blur(4px)' }}>
+                          <p className="text-[9px] uppercase tracking-[0.15em] font-semibold" style={{ color: '#78716c' }}>Visual Prompt</p>
+                          <textarea
+                            className="flex-1 rounded-lg p-2 text-[10px] leading-relaxed resize-none focus:outline-none"
+                            style={{ background: 'rgba(41,37,36,0.8)', color: '#d6d3d1', border: '1px solid rgba(251,191,36,0.3)' }}
+                            value={editingPromptText}
+                            onChange={e => setEditingPromptText(e.target.value)}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingPromptId(null)}
+                              className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold"
+                              style={{ background: 'rgba(41,37,36,0.8)', color: '#a8a29e', border: '1px solid rgba(255,255,255,0.06)' }}
+                            >Cancel</button>
+                            <button
+                              onClick={() => handleSavePrompt(scene.id)}
+                              className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold"
+                              style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#0c0a09' }}
+                            >Save</button>
+                          </div>
                         </div>
                       )}
 

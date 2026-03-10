@@ -17,7 +17,7 @@ function getGeminiClient(): GoogleGenAI {
 // POST /api/gemini/analyze
 router.post('/analyze', validateAnalyzeRequest, async (req: Request, res: Response) => {
   try {
-    const { script, aspectRatio = '9:16', isDramatic = false } = req.body;
+    const { script, aspectRatio = '9:16', isDramatic = false, singleScene = false } = req.body;
     const ai = getGeminiClient();
 
     const textGuidance = aspectRatio === '16:9'
@@ -58,7 +58,20 @@ router.post('/analyze', validateAnalyzeRequest, async (req: Request, res: Respon
          - Clean composition with lots of breathing room and whitespace
          - Example: "beige background, dark navy 3D rounded squares with simple white icons, orange accent sphere in center, soft shadows, clean minimal composition"`;
 
-    const systemInstruction = `
+    const systemInstruction = singleScene
+      ? `
+      You are an expert storyboard artist and visual designer.
+      Your goal is to represent the entire script as exactly ONE scene.
+
+      1. Output exactly 1 scene. The 'text' should be the full script (or a condensed summary if very long).
+      2. For the scene, provide a 'visualPrompt' following these design rules:
+         ${visualStyle}
+         - ${textGuidance}
+         - Always mention the background/setting first in your prompt
+         - The visual should capture the overall theme and mood of the entire script
+      3. Provide a title for the story.
+    `
+      : `
       You are an expert storyboard artist and visual designer.
       Your goal is to break down a video script into a series of compelling scenes.
 

@@ -66,4 +66,4 @@ router.post('/video', validateVideoRequest, async (req: Request, res: Response) 
   }
 });
 
-export { router as falRouter };
+export { router as videoRouter };

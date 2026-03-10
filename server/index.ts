@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { geminiRouter } from './routes/gemini';
-import { falRouter } from './routes/fal';
+import { videoRouter } from './routes/video';
 import { apiLimiter } from './middleware/rateLimit';
 
 dotenv.config();
@@ -15,7 +15,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api', apiLimiter);
 
 app.use('/api/gemini', geminiRouter);
-app.use('/api/fal', falRouter);
+app.use('/api/fal', videoRouter);
 
 app.get('/api/health', (_req, res) => {
   const hasGemini = !!process.env.GEMINI_API_KEY;

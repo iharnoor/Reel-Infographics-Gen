@@ -7,12 +7,13 @@ export const analyzeScript = async (
   script: string,
   totalTargetSeconds: number = 60,
   aspectRatio: '9:16' | '16:9' = '9:16',
-  isDramatic: boolean = false
+  isDramatic: boolean = false,
+  singleScene: boolean = false
 ): Promise<Storyboard> => {
   const res = await fetch(`${API_BASE}/gemini/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ script, aspectRatio, isDramatic }),
+    body: JSON.stringify({ script, aspectRatio, isDramatic, singleScene }),
   });
 
   if (!res.ok) {

@@ -3,6 +3,7 @@ export interface Scene {
   text: string;
   visualPrompt: string;
   imageData?: string; // Base64 string
+  overlayText?: string; // Optional user-editable text rendered on top of the image
   videoUri?: string; // URI for the generated video
   videoBlob?: Blob; // Cached video blob (prevents URL expiration issues)
   duration: number; // Duration in seconds for this slide

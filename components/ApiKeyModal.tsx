@@ -73,8 +73,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onKeySelected, forceNe
           border: '1px solid rgba(255, 255, 255, 0.04)',
         }}>
           <p className="text-[10px] uppercase tracking-[0.15em] mb-2.5 font-semibold" style={{ color: '#57534e' }}>Required in .env file</p>
-          <code className="text-xs block font-mono mb-1" style={{ color: '#4ade80' }}>GEMINI_API_KEY=your_key_here</code>
-          <code className="text-xs block font-mono" style={{ color: '#4ade80' }}>FAL_API_KEY=your_key_here</code>
+          <code className="text-xs block font-mono" style={{ color: '#4ade80' }}>GEMINI_API_KEY=your_key_here</code>
         </div>
 
         <button
